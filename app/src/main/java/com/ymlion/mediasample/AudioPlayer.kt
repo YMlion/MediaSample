@@ -38,16 +38,19 @@ class AudioPlayer {
         playEnd = false
         var trackIndex = getTrackIndex("audio")
         if (trackIndex < 0) {
+            Log.w("TAG", "no audio found!!!")
             return
         }
         extractor.selectTrack(trackIndex)
         var mediaFormat: MediaFormat = extractor.getTrackFormat(trackIndex)
         var mimeType = mediaFormat.getString(MediaFormat.KEY_MIME)
-        Log.d("TAG", "mime type is $mimeType")
         val sampleRate = mediaFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        val minBufferSize = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO,
+                AudioFormat.ENCODING_PCM_16BIT)
+        Log.d("TAG", "audio mime type is $mimeType; sample rate : $sampleRate; buffer size : $minBufferSize")
         player = AudioTrack(AudioManager.STREAM_MUSIC,
                 sampleRate,
-                AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT, 2048,
+                AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT, minBufferSize,
                 AudioTrack.MODE_STREAM)
         player!!.play()
         val codec = MediaCodec.createDecoderByType(mimeType)

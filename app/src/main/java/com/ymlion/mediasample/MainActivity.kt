@@ -91,6 +91,7 @@ class MainActivity : Activity(), OnClickListener {
         checkCoder("video/avc", false)
         var trackIndex = getTrackIndex("video")
         if (trackIndex < 0) {
+            Log.w("TAG", "no video found!!!")
             return
         }
         extractor.selectTrack(trackIndex)
