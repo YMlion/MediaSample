@@ -2,7 +2,6 @@ package com.ymlion.mediasample
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.SurfaceTexture
 import android.media.MediaCodec
 import android.media.MediaCodec.BufferInfo
 import android.media.MediaCodecInfo
@@ -17,13 +16,13 @@ import android.provider.MediaStore
 import android.util.Log
 import android.view.Gravity
 import android.view.Surface
-import android.view.TextureView.SurfaceTextureListener
 import android.view.View
 import android.view.View.OnClickListener
 import android.widget.FrameLayout
 import android.widget.FrameLayout.LayoutParams
 import kotlinx.android.synthetic.main.activity_main.btn_file
 import kotlinx.android.synthetic.main.activity_main.btn_play
+import kotlinx.android.synthetic.main.activity_main.btn_stop
 import kotlinx.android.synthetic.main.activity_main.frame_layout
 import kotlinx.android.synthetic.main.activity_main.textureView
 import kotlinx.android.synthetic.main.activity_main.tv_path
@@ -31,48 +30,41 @@ import kotlinx.android.synthetic.main.activity_main.tv_path
 class MainActivity : Activity(), OnClickListener {
     var playEnd = true
     var filePath = ""
-    var sleepTime: Long = 0
     var audioPlayer: AudioPlayer = AudioPlayer()
+    var playPause = false
+    var resumePosition = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         textureView.isOpaque = false
-        textureView.surfaceTextureListener = object : SurfaceTextureListener {
-            override fun onSurfaceTextureUpdated(surface: SurfaceTexture?) {
-            }
-
-            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture?): Boolean {
-                return false
-            }
-
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture?, width: Int,
-                    height: Int) {
-            }
-
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture?, width: Int,
-                    height: Int) {
-            }
-        }
         filePath = Environment.getExternalStorageDirectory().absolutePath + "/download/video10s.mp4"
         tv_path.text = filePath
         btn_file.setOnClickListener(this)
         btn_play.setOnClickListener(this)
+        btn_stop.setOnClickListener(this)
     }
 
     override fun onClick(v: View?) {
         when (v!!.id) {
             R.id.btn_play -> {
-                if (!playEnd) {
-                    playEnd = true
-                    audioPlayer.stop()
-                } else {
+                if (playEnd) {
+                    resumePosition = 0L
                     Thread({
                         initCodec(Surface(textureView.surfaceTexture))
                     }).start()
                     Thread({
                         audioPlayer.start(filePath)
                     }).start()
+                    btn_play.text = "Pause"
+                } else {
+                    playPause = !playPause
+                    btn_play.text = if (playPause) {
+                        "Play"
+                    } else {
+                        "Pause"
+                    }
+                    audioPlayer.pause()
                 }
             }
             R.id.btn_file -> {
@@ -80,6 +72,27 @@ class MainActivity : Activity(), OnClickListener {
                 intent.type = "video/*"
                 intent.action = Intent.ACTION_GET_CONTENT
                 startActivityForResult(intent, 1)
+            }
+            R.id.btn_stop -> {
+                if (playEnd) {
+                    if (btn_stop.text.toString() == "Stop") {
+                        return
+                    }
+                    Thread({
+                        initCodec(Surface(textureView.surfaceTexture))
+                    }).start()
+                    Thread({
+                        audioPlayer.resume(filePath)
+                    }).start()
+                    btn_play.text = "Pause"
+                    btn_stop.text = "Stop"
+                    Log.d("TAG", " resume position is $resumePosition")
+                } else {
+                    playEnd = true
+                    audioPlayer.stop()
+                    btn_play.text = "Play"
+                    btn_stop.text = "Resume"
+                }
             }
         }
     }
@@ -112,7 +125,29 @@ class MainActivity : Activity(), OnClickListener {
 
     private fun decodeFrame(codec: MediaCodec) {
         var readNext = true
+        var startTime: Long = 0
+        var paused = false
+        var pauseTime = 0L
+        if (resumePosition > 0) {
+            extractor.seekTo(resumePosition, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            while (resumePosition > extractor.sampleTime) {
+                extractor.advance()
+            }
+            startTime = System.currentTimeMillis() - extractor.sampleTime / 1000
+        }
         while (!playEnd) {
+            if (playPause) {
+                if (pauseTime == 0L) {
+                    paused = true
+                    pauseTime = System.currentTimeMillis()
+                }
+                continue
+            }
+            if (paused) {
+                paused = false
+                startTime += System.currentTimeMillis() - pauseTime
+                pauseTime = 0L
+            }
             if (readNext) {
                 var index = codec.dequeueInputBuffer(10000)
                 if (index >= 0) {
@@ -122,7 +157,8 @@ class MainActivity : Activity(), OnClickListener {
                         codec.queueInputBuffer(index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                         readNext = false
                     } else {
-                        codec.queueInputBuffer(index, 0, simpleSize, extractor.sampleTime, 0)
+                        val sampleTime = extractor.sampleTime
+                        codec.queueInputBuffer(index, 0, simpleSize, sampleTime, 0)
                         extractor.advance()
                     }
                 }
@@ -130,13 +166,15 @@ class MainActivity : Activity(), OnClickListener {
             val info = BufferInfo()
             var index = codec.dequeueOutputBuffer(info, 10000)
             if (index >= 0) {
-                if (sleepTime == 0L) {
-                    sleepTime = System.currentTimeMillis()
+                if (startTime == 0L) {
+                    startTime = System.currentTimeMillis()
                 }
-                var sleepTime1 = (info.presentationTimeUs / 1000) - (System.currentTimeMillis() - sleepTime)
-                if (sleepTime1 > 0) {
-                    SystemClock.sleep(sleepTime1)
+                val ms = info.presentationTimeUs / 1000
+                var sleepTime = ms - (System.currentTimeMillis() - startTime)
+                if (sleepTime > 0) {
+                    SystemClock.sleep(sleepTime)
                 }
+                resumePosition = info.presentationTimeUs
                 codec.releaseOutputBuffer(index, true)
                 if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                     playEnd = true
@@ -146,8 +184,11 @@ class MainActivity : Activity(), OnClickListener {
         Log.d("TAG", "play finished!!!")
         codec.stop()
         codec.release()
+        extractor.release()
         playEnd = true
-        sleepTime = 0
+        runOnUiThread {
+            btn_play.text = "Play"
+        }
     }
 
     private fun getTrackIndex(type: String): Int {
@@ -267,6 +308,9 @@ class MainActivity : Activity(), OnClickListener {
                     tv_path.text = filePath
                 }
                 playEnd = true
+                audioPlayer.stop()
+                btn_play.text = "Play"
+                btn_stop.text = "Stop"
             }
             if (!cursor.isClosed) {
                 cursor.close()

@@ -5,16 +5,12 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaCodec.BufferInfo
+import android.media.MediaCodecInfo
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.os.SystemClock
 import android.util.Log
-import android.R.array
 import java.nio.ByteBuffer
 import kotlin.experimental.or
-import android.media.MediaCodecInfo
-
-
 
 
 /**
@@ -24,14 +20,25 @@ class AudioPlayer {
 
     var playEnd = true
     var filePath = ""
-    var sleepTime: Long = 0
     var player: AudioTrack? = null
+    var pause = false
+    var resumePosition = 0L
 
     private lateinit var extractor: MediaExtractor
 
     fun start(file: String) {
+        resumePosition = 0L
         filePath = file
         initCodec()
+    }
+
+    fun resume(file: String) {
+        filePath = file
+        initCodec()
+    }
+
+    fun pause() {
+        pause = !pause
     }
 
     private fun initCodec() {
@@ -71,7 +78,16 @@ class AudioPlayer {
 
     private fun decodeFrame(codec: MediaCodec) {
         var readNext = true
+        if (resumePosition > 0) {
+            extractor.seekTo(resumePosition, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            while (resumePosition > extractor.sampleTime) {
+                extractor.advance()
+            }
+        }
         while (!playEnd) {
+            if (pause) {
+                continue
+            }
             if (readNext) {
                 var index = codec.dequeueInputBuffer(10000)
                 if (index >= 0) {
@@ -97,13 +113,6 @@ class AudioPlayer {
                 continue
             }
             while (index >= 0) {
-                if (sleepTime == 0L) {
-                    sleepTime = System.currentTimeMillis()
-                }
-                var sleepTime1 = (info.presentationTimeUs / 1000) - (System.currentTimeMillis() - sleepTime)
-                if (sleepTime1 > 0) {
-                    SystemClock.sleep(sleepTime1)
-                }
                 var buffer = codec.getOutputBuffer(index)
                 buffer.position(info.offset)
                 buffer.limit(info.offset + info.size)
@@ -115,6 +124,7 @@ class AudioPlayer {
                 if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                     playEnd = true
                 }
+                resumePosition = info.presentationTimeUs
                 index = codec.dequeueOutputBuffer(info, 10000)
             }
         }
@@ -123,8 +133,8 @@ class AudioPlayer {
         codec.release()
         player!!.stop()
         player!!.release()
+        extractor.release()
         playEnd = true
-        sleepTime = 0
     }
 
     fun stop() {
