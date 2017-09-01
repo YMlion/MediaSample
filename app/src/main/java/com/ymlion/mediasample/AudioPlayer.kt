@@ -47,7 +47,7 @@ class AudioPlayer {
         val sampleRate = mediaFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
         val minBufferSize = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO,
                 AudioFormat.ENCODING_PCM_16BIT)
-        Log.d("TAG", "audio mime type is $mimeType; sample rate : $sampleRate; buffer size : $minBufferSize")
+        Log.d("TAG", "audio format map : $mediaFormat; buffer size : $minBufferSize")
         player = AudioTrack(AudioManager.STREAM_MUSIC,
                 sampleRate,
                 AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT, minBufferSize,
@@ -88,6 +88,14 @@ class AudioPlayer {
             }
             val info = BufferInfo()
             var index = codec.dequeueOutputBuffer(info, 10000)
+            if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                // 当MediaFormat改变时，需要改变AudioTrack的sample rate
+                val format = codec.outputFormat
+                val sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                Log.d("TAG", "audio changed format map is : $format")
+                player!!.playbackRate = sampleRate
+                continue
+            }
             while (index >= 0) {
                 if (sleepTime == 0L) {
                     sleepTime = System.currentTimeMillis()
