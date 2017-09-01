@@ -79,6 +79,7 @@ class AudioPlayer {
     private fun decodeFrame(codec: MediaCodec) {
         var readNext = true
         if (resumePosition > 0) {
+            Log.e("TAG", "audio pos $resumePosition")
             extractor.seekTo(resumePosition, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             while (resumePosition > extractor.sampleTime) {
                 extractor.advance()

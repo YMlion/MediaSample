@@ -20,12 +20,17 @@ import android.view.View
 import android.view.View.OnClickListener
 import android.widget.FrameLayout
 import android.widget.FrameLayout.LayoutParams
+import android.widget.SeekBar
+import android.widget.SeekBar.OnSeekBarChangeListener
 import kotlinx.android.synthetic.main.activity_main.btn_file
 import kotlinx.android.synthetic.main.activity_main.btn_play
 import kotlinx.android.synthetic.main.activity_main.btn_stop
 import kotlinx.android.synthetic.main.activity_main.frame_layout
+import kotlinx.android.synthetic.main.activity_main.sb_time
 import kotlinx.android.synthetic.main.activity_main.textureView
 import kotlinx.android.synthetic.main.activity_main.tv_path
+import kotlinx.android.synthetic.main.activity_main.tv_play_time
+import kotlinx.android.synthetic.main.activity_main.tv_total_time
 
 class MainActivity : Activity(), OnClickListener {
     var playEnd = true
@@ -33,6 +38,7 @@ class MainActivity : Activity(), OnClickListener {
     var audioPlayer: AudioPlayer = AudioPlayer()
     var playPause = false
     var resumePosition = 0L
+    var totalTime = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +49,19 @@ class MainActivity : Activity(), OnClickListener {
         btn_file.setOnClickListener(this)
         btn_play.setOnClickListener(this)
         btn_stop.setOnClickListener(this)
+        sb_time.setOnSeekBarChangeListener(object : OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                btn_stop.performClick()
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                resumePosition = seekBar!!.progress * 1000L
+                btn_stop.performClick()
+            }
+        })
     }
 
     override fun onClick(v: View?) {
@@ -129,6 +148,7 @@ class MainActivity : Activity(), OnClickListener {
         var paused = false
         var pauseTime = 0L
         if (resumePosition > 0) {
+            Log.e("TAG", "video pos $resumePosition")
             extractor.seekTo(resumePosition, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             while (resumePosition > extractor.sampleTime) {
                 extractor.advance()
@@ -176,6 +196,13 @@ class MainActivity : Activity(), OnClickListener {
                 }
                 resumePosition = info.presentationTimeUs
                 codec.releaseOutputBuffer(index, true)
+                runOnUiThread {
+                    var second = (resumePosition / 1000000).toInt()
+                    var minutes = second / 60
+                    second %= 60
+                    tv_play_time.text = "${addZero(minutes, 2)}:${addZero(second, 2)}"
+                    sb_time.progress = (resumePosition / 1000).toInt()
+                }
                 if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                     playEnd = true
                 }
@@ -208,12 +235,21 @@ class MainActivity : Activity(), OnClickListener {
     private fun checkVideoInfo(): Int {
         var retriever = MediaMetadataRetriever()
         retriever.setDataSource(filePath)
-        var duration = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_DURATION).toLong() / 1000.toFloat()
+        totalTime = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_DURATION).toLong()
         var rotation = retriever.extractMetadata(
                 MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION).toInt()
-        Log.d("TAG", "video duration : $duration ; orientation : $rotation")
+        Log.d("TAG", "video duration : $totalTime ; orientation : $rotation")
+        var second = totalTime.toInt() / 1000
+        var minutes = second / 60
+        second %= 60
+        tv_total_time.text = "${addZero(minutes, 2)}:${addZero(second, 2)}"
+        sb_time.max = totalTime.toInt()
         return rotation
+    }
+
+    private fun addZero(num: Int, count: Int): String {
+        return String.format("%0${count}d", num)
     }
 
     private fun calculateSize(mediaFormat: MediaFormat?, rotation: Int) {
