@@ -31,6 +31,7 @@ import kotlinx.android.synthetic.main.activity_main.textureView
 import kotlinx.android.synthetic.main.activity_main.tv_path
 import kotlinx.android.synthetic.main.activity_main.tv_play_time
 import kotlinx.android.synthetic.main.activity_main.tv_total_time
+import kotlin.concurrent.thread
 
 class MainActivity : Activity(), OnClickListener {
     var playEnd = true
@@ -69,12 +70,11 @@ class MainActivity : Activity(), OnClickListener {
             R.id.btn_play -> {
                 if (playEnd) {
                     resumePosition = 0L
-                    Thread({
-                        initCodec(Surface(textureView.surfaceTexture))
-                    }).start()
-                    Thread({
+                    thread {
                         audioPlayer.start(filePath)
-                    }).start()
+                    }
+                    playVideo(Surface(textureView.surfaceTexture), false)
+
                     btn_play.text = "Pause"
                 } else {
                     playPause = !playPause
@@ -97,12 +97,10 @@ class MainActivity : Activity(), OnClickListener {
                     if (btn_stop.text.toString() == "Stop") {
                         return
                     }
-                    Thread({
-                        initCodec(Surface(textureView.surfaceTexture))
-                    }).start()
-                    Thread({
+                    thread {
                         audioPlayer.resume(filePath)
-                    }).start()
+                    }
+                    playVideo(Surface(textureView.surfaceTexture), false)
                     btn_play.text = "Pause"
                     btn_stop.text = "Stop"
                     Log.d("TAG", " resume position is $resumePosition")
@@ -118,7 +116,7 @@ class MainActivity : Activity(), OnClickListener {
 
     private lateinit var extractor: MediaExtractor
 
-    private fun initCodec(surface: Surface) {
+    private fun playVideo(surface: Surface?, capture: Boolean) {
         playEnd = false
         checkCoder("video/avc", false)
         var trackIndex = getTrackIndex("video")
@@ -131,22 +129,25 @@ class MainActivity : Activity(), OnClickListener {
         var mimeType = mediaFormat.getString(MediaFormat.KEY_MIME)
         val codec = MediaCodec.createDecoderByType(mimeType)
 
-        runOnUiThread({
-            var rotation = checkVideoInfo()
-            calculateSize(mediaFormat, rotation)
-        })
+        var rotation = checkVideoInfo()
+        calculateSize(mediaFormat, rotation)
 
         codec.configure(mediaFormat, surface, null, 0)
         codec.start()
         Log.d("TAG", "play started...")
-        decodeFrame(codec)
+        thread {
+            decodeFrame(codec, capture)
+        }
     }
 
-    private fun decodeFrame(codec: MediaCodec) {
+    private fun decodeFrame(codec: MediaCodec, capture: Boolean) {
         var readNext = true
         var startTime: Long = 0
         var paused = false
         var pauseTime = 0L
+        if (capture) {
+            resumePosition = totalTime * 500
+        }
         if (resumePosition > 0) {
             Log.e("TAG", "video pos $resumePosition")
             extractor.seekTo(resumePosition, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
@@ -186,25 +187,34 @@ class MainActivity : Activity(), OnClickListener {
             val info = BufferInfo()
             var index = codec.dequeueOutputBuffer(info, 10000)
             if (index >= 0) {
-                if (startTime == 0L) {
-                    startTime = System.currentTimeMillis()
-                }
-                val ms = info.presentationTimeUs / 1000
-                var sleepTime = ms - (System.currentTimeMillis() - startTime)
-                if (sleepTime > 0) {
-                    SystemClock.sleep(sleepTime)
-                }
-                resumePosition = info.presentationTimeUs
-                codec.releaseOutputBuffer(index, true)
-                runOnUiThread {
-                    var second = (resumePosition / 1000000).toInt()
-                    var minutes = second / 60
-                    second %= 60
-                    tv_play_time.text = "${addZero(minutes, 2)}:${addZero(second, 2)}"
-                    sb_time.progress = (resumePosition / 1000).toInt()
-                }
                 if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                     playEnd = true
+                    continue
+                }
+                if (capture) {
+                    var image = codec.getOutputImage(index)
+                    ImageUtil.saveImage(image)
+                    codec.releaseOutputBuffer(index, false)
+                    playEnd = true
+                    break
+                } else {
+                    if (startTime == 0L) {
+                        startTime = System.currentTimeMillis()
+                    }
+                    val ms = info.presentationTimeUs / 1000
+                    var sleepTime = ms - (System.currentTimeMillis() - startTime)
+                    if (sleepTime > 0) {
+                        SystemClock.sleep(sleepTime)
+                    }
+                    resumePosition = info.presentationTimeUs
+                    codec.releaseOutputBuffer(index, true)
+                    runOnUiThread {
+                        var second = (resumePosition / 1000000).toInt()
+                        var minutes = second / 60
+                        second %= 60
+                        tv_play_time.text = "${addZero(minutes, 2)}:${addZero(second, 2)}"
+                        sb_time.progress = (resumePosition / 1000).toInt()
+                    }
                 }
             }
         }
@@ -347,6 +357,8 @@ class MainActivity : Activity(), OnClickListener {
                 audioPlayer.stop()
                 btn_play.text = "Play"
                 btn_stop.text = "Stop"
+                totalTime = 0L
+                playVideo(null, true)
             }
             if (!cursor.isClosed) {
                 cursor.close()
