@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <TextureView
+            android:id="@+id/textureView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"/>
+
+        <TextView
+            android:id="@+id/record_seconds_tv"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="20dp"
+            android:text="0s"
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:visibility="gone"/>
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/linearLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_change_camera"
+            android:onClick="changeCamera"
+            android:text="前/后"
+            style="@style/btn_control_style"/>
+
+        <Button
+            android:id="@+id/btn_record"
+            android:onClick="recordVideo"
+            android:text="record"
+            style="@style/btn_control_style"/>
+
+        <Button
+            android:id="@+id/btn_stop"
+            android:onClick="stopRecord"
+            android:text="stop"
+            style="@style/btn_control_style"/>
+    </LinearLayout>
+
+</FrameLayout>

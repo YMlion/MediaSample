@@ -1,0 +1,557 @@
+package com.ymlion.mediasample;
+
+import android.Manifest;
+import android.app.Activity;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.graphics.ImageFormat;
+import android.graphics.SurfaceTexture;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.CaptureResult;
+import android.hardware.camera2.TotalCaptureResult;
+import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
+import android.media.MediaFormat;
+import android.media.MediaMuxer;
+import android.os.Build;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.text.format.DateFormat;
+import android.util.Log;
+import android.util.Size;
+import android.util.SparseIntArray;
+import android.view.Surface;
+import android.view.TextureView;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+
+import static android.hardware.camera2.CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE;
+import static android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO;
+import static android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM;
+
+/**
+ * Created by YMlion on 2017/7/26.
+ */
+
+public class CaptureManager {
+
+    private static final String TAG = "CaptureManager";
+    /**
+     * Conversion from screen rotation to JPEG orientation.
+     */
+    private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
+    private static final SparseIntArray INVERSE_ORIENTATIONS = new SparseIntArray();
+
+    static {
+        ORIENTATIONS.append(Surface.ROTATION_0, 90);
+        ORIENTATIONS.append(Surface.ROTATION_90, 180);
+        ORIENTATIONS.append(Surface.ROTATION_180, 270);
+        ORIENTATIONS.append(Surface.ROTATION_270, 0);
+    }
+
+    static {
+        INVERSE_ORIENTATIONS.append(Surface.ROTATION_0, 270);
+        INVERSE_ORIENTATIONS.append(Surface.ROTATION_90, 180);
+        INVERSE_ORIENTATIONS.append(Surface.ROTATION_180, 90);
+        INVERSE_ORIENTATIONS.append(Surface.ROTATION_270, 0);
+    }
+
+    /**
+     * Whether the current camera device supports Flash or not.
+     */
+    private boolean mFlashSupported;
+
+    /**
+     * Orientation of the camera sensor
+     */
+    private int mSensorOrientation;
+    private Size mPreviewSize;
+    private static final int STATE_PREVIEW = 0;
+    private static final int STATE_RECORDING = 5;
+    private static final int STATE_RECORDED = 6;
+
+    /**
+     * @see #STATE_PREVIEW
+     * @see #STATE_RECORDING
+     * @see #STATE_RECORDED
+     */
+    private int mState = STATE_PREVIEW;
+
+    private static CameraManager cm;
+    private Context mContext;
+    private SurfaceTexture mTexture;
+    private CameraDevice mCameraDevice;
+    private CaptureRequest.Builder mRequestBuilder;
+    private CameraCaptureSession mCaptureSession;
+    private Handler mThreadHandler;
+    private String mCameraId;
+    private CaptureCallback mCaptureCallback;
+
+    private Surface mPreviewSurface;
+
+    private File mCurrentVideo;
+
+    private int mFacing = 1;
+
+    private SensorManager sm;
+    private SensorEventListener mSensorListener;
+    private float mSensorX;
+    private float mSensorY;
+
+    private MediaCodec encoder;
+    private Surface inputSurface;
+    private MediaMuxer muxer;
+    private int videoTrack = -1;
+
+    public CaptureManager(Context context, SurfaceTexture surfaceTexture) {
+        this.mContext = context;
+        cm = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+        sm = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+        this.mTexture = surfaceTexture;
+        HandlerThread thread = new HandlerThread("CaptureManager");
+        thread.start();
+        mThreadHandler = new Handler(thread.getLooper());
+    }
+
+    /**
+     * 设置摄像头：前置or后置
+     *
+     * @param facing 0：前置；1：后置
+     */
+    public void setFacing(int facing) {
+        mFacing = facing;
+    }
+
+    /**
+     * 切换摄像头
+     *
+     * @param textureView preview surface
+     */
+    public void changeCamera(TextureView textureView) {
+        mFacing = 1 - mFacing;
+        close();
+        open(textureView.getWidth(), textureView.getHeight());
+    }
+
+    public void open(int width, int height) {
+        try {
+            setUpCameraOutputs(width, height);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (mContext.checkSelfPermission(Manifest.permission.CAMERA)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+            }
+            cm.openCamera(mCameraId, new DeviceStateCallback(), mThreadHandler);
+            Sensor gravitySensor = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            sm.registerListener(mSensorListener = new CameraSensorListener(), gravitySensor,
+                    SensorManager.SENSOR_DELAY_NORMAL);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void startRecord() {
+        Log.d(TAG, "startRecord");
+        mState = STATE_RECORDING;
+        setupRecord();
+        try {
+            inputSurface = encoder.createInputSurface();
+            List<Surface> surfaces = Arrays.asList(mPreviewSurface, inputSurface);
+            mCameraDevice.createCaptureSession(surfaces, new SessionStateCallback(),
+                    mThreadHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void setupRecord() {
+        try {
+            mCurrentVideo = getFile(1);
+            //out = new BufferedOutputStream(new FileOutputStream(mCurrentVideo));
+            String mime = "video/avc";    //编码的MIME
+            int rate = 12800000;            //波特率，12800kb
+            int frameRate = 30;           //帧率，30帧
+            int frameInterval = 1;        //关键帧一秒一关键帧
+
+            //和音频编码一样，设置编码格式，获取编码器实例
+            MediaFormat format = MediaFormat.createVideoFormat(mime, 1920, 1080);
+            format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
+            format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
+            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, frameInterval);
+            format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
+                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+            encoder = MediaCodec.createEncoderByType("video/avc");
+            muxer = new MediaMuxer(mCurrentVideo.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            encoder.setCallback(new MediaCodec.Callback() {
+                @Override public void onInputBufferAvailable(MediaCodec codec, int index) {
+                    Log.d(TAG, "onInputBufferAvailable: " + index);
+                }
+
+                @Override public void onOutputBufferAvailable(MediaCodec codec, int index,
+                        MediaCodec.BufferInfo info) {
+                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        encoder.stop();
+                        inputSurface.release();
+                        encoder.release();
+                        muxer.stop();
+                        muxer.release();
+                        /*try {
+                            out.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }*/
+                        return;
+                    }
+                    if (index >= 0) {
+                        if (videoTrack < 0) {
+                            videoTrack = muxer.addTrack(encoder.getOutputFormat());
+                            Log.d(TAG, " video track is " + videoTrack);
+                            muxer.start();
+                        }
+                        ByteBuffer buffer = codec.getOutputBuffer(index);
+                        muxer.writeSampleData(videoTrack, buffer, info);
+                        // 直接写入文件的是未封装的h264数据
+                        /*byte[] bytes = new byte[info.size];
+                        buffer.get(bytes);
+                        try {
+                            out.write(bytes);
+                            out.flush();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }*/
+                    }
+                    codec.releaseOutputBuffer(index, false);
+                }
+
+                @Override public void onError(MediaCodec codec,
+                        MediaCodec.CodecException e) {
+
+                }
+
+                @Override public void onOutputFormatChanged(MediaCodec codec,
+                        MediaFormat format) {
+
+                }
+            });
+            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void stopRecord() {
+        Log.d(TAG, "stopRecord");
+        mState = STATE_RECORDED;
+        encoder.signalEndOfInputStream();
+        try {
+            List<Surface> surfaces = Collections.singletonList(mPreviewSurface);
+            mCameraDevice.createCaptureSession(surfaces, new SessionStateCallback(),
+                    mThreadHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void close() {
+        if (mCaptureSession != null) {
+            mCaptureSession.close();
+        }
+        if (mCameraDevice != null) {
+            mCameraDevice.close();
+        }
+        sm.unregisterListener(mSensorListener);
+    }
+
+    private class DeviceStateCallback extends CameraDevice.StateCallback {
+
+        @Override public void onOpened(CameraDevice camera) {
+            try {
+                mCameraDevice = camera;
+                Log.d(TAG, "DeviceStateCallback onOpened: " + camera.getId());
+
+                mTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+                Log.d(TAG, "onOpened: texture size : " + mPreviewSize);
+
+                mRequestBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+                mPreviewSurface = new Surface(mTexture);
+                mRequestBuilder.addTarget(mPreviewSurface);
+                List<Surface> surfaces = new ArrayList<>();
+                surfaces.add(mPreviewSurface);
+                camera.createCaptureSession(surfaces, new SessionStateCallback(), mThreadHandler);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override public void onDisconnected(CameraDevice camera) {
+            Log.d(TAG, "DeviceStateCallback onDisconnected: " + camera.getId());
+        }
+
+        @Override public void onError(CameraDevice camera, int error) {
+            Log.e(TAG, "DeviceStateCallback onError: " + error);
+        }
+    }
+
+    private class SessionStateCallback extends CameraCaptureSession.StateCallback {
+
+        @Override public void onConfigured(CameraCaptureSession session) {
+            Log.d(TAG, "SessionStateCallback onConfigured: ");
+            mCaptureSession = session;
+            try {
+                if (mState == STATE_RECORDING) {
+                    CaptureRequest.Builder builder =
+                            mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+                    builder.addTarget(mPreviewSurface);
+                    builder.addTarget(inputSurface);
+                    mCaptureSession.setRepeatingRequest(builder.build(), mCaptureCallback, null);
+                    encoder.start();
+                } else {
+                    setupRequest(mRequestBuilder);
+                    mCaptureCallback = new CaptureCallback();
+                    session.setRepeatingRequest(mRequestBuilder.build(), mCaptureCallback,
+                            mThreadHandler);
+                }
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override public void onConfigureFailed(CameraCaptureSession session) {
+            Log.d(TAG, "SessionStateCallback onConfigureFailed");
+        }
+    }
+
+    private class CaptureCallback extends CameraCaptureSession.CaptureCallback {
+        @Override public void onCaptureProgressed(CameraCaptureSession session,
+                CaptureRequest request, CaptureResult partialResult) {
+        }
+
+        @Override public void onCaptureCompleted(CameraCaptureSession session,
+                CaptureRequest request, TotalCaptureResult result) {
+        }
+    }
+
+    /**
+     * 生成文件名
+     *
+     * @param type 0: image; 1: video
+     */
+    private File getFile(int type) {
+        String fileName =
+                DateFormat.format("yyyyMMddHHmmss", System.currentTimeMillis()).toString();
+        String dirType = type == 0 ? Environment.DIRECTORY_PICTURES : Environment.DIRECTORY_MOVIES;
+        String fileType = type == 0 ? ".jpg" : ".mp4";
+        return new File(Environment.getExternalStoragePublicDirectory(dirType).getAbsolutePath()
+                + "/"
+                + fileName
+                + fileType);
+    }
+
+    /**
+     * Compares two {@code Size}s based on their areas.
+     */
+    static class CompareSizesByArea implements Comparator<Size> {
+
+        @Override public int compare(Size lhs, Size rhs) {
+            // We cast here to ensure the multiplications won't overflow
+            return Long.signum((long) lhs.getWidth() * lhs.getHeight()
+                    - (long) rhs.getWidth() * rhs.getHeight());
+        }
+    }
+
+    /**
+     * Given {@code choices} of {@code Size}s supported by a camera, choose the smallest one that
+     * is at least as large as the respective texture view size, and that is at most as large as the
+     * respective max size, and whose aspect ratio matches with the specified value. If such size
+     * doesn't exist, choose the largest one that is at most as large as the respective max size,
+     * and whose aspect ratio matches with the specified value.
+     *
+     * @param choices The list of sizes that the camera supports for the intended output
+     * class
+     * @param textureViewWidth The width of the texture view relative to sensor coordinate
+     * @param textureViewHeight The height of the texture view relative to sensor coordinate
+     * @param aspectRatio The aspect ratio
+     * @return The optimal {@code Size}, or an arbitrary one if none were big enough
+     */
+    private static Size chooseOptimalSize(Size[] choices, int textureViewWidth,
+            int textureViewHeight, Size aspectRatio) {
+
+        // Collect the supported resolutions that are at least as big as the preview Surface
+        List<Size> bigEnough = new ArrayList<>();
+        // Collect the supported resolutions that are smaller than the preview Surface
+        List<Size> notBigEnough = new ArrayList<>();
+        int w = aspectRatio.getWidth();
+        int h = aspectRatio.getHeight();
+        for (Size option : choices) {
+            if (option.getHeight() == option.getWidth() * h / w) {
+                if (option.getWidth() >= textureViewWidth
+                        && option.getHeight() >= textureViewHeight) {
+                    bigEnough.add(option);
+                } else {
+                    notBigEnough.add(option);
+                }
+            }
+        }
+
+        // Pick the smallest of those big enough. If there is no one big enough, pick the
+        // largest of those not big enough.
+        if (bigEnough.size() > 0) {
+            return Collections.min(bigEnough, new CompareSizesByArea());
+        } else if (notBigEnough.size() > 0) {
+            return Collections.max(notBigEnough, new CompareSizesByArea());
+        } else {
+            Log.e(TAG, "Couldn't find any suitable preview size");
+            return choices[0];
+        }
+    }
+
+    private int getRotation() {
+        int rotation;
+        if (Float.compare(mSensorX, 0) <= 0 && Float.compare(mSensorX + mSensorY, 0) < 0) {
+            if (Float.compare(mSensorX, mSensorY) > 0) {
+                rotation = Surface.ROTATION_180;
+            } else {
+                rotation = Surface.ROTATION_90;
+            }
+        } else if (Float.compare(mSensorX, 0) > 0 && Float.compare(mSensorX - mSensorY, 0) > 0) {
+            if (Float.compare(mSensorX + mSensorY, 0) > 0) {
+                rotation = Surface.ROTATION_270;
+            } else {
+                rotation = Surface.ROTATION_180;
+            }
+        } else {
+            rotation = Surface.ROTATION_0;
+        }
+        return rotation;
+    }
+
+    private void setupRequest(CaptureRequest.Builder builder) {
+        builder.set(CaptureRequest.CONTROL_MODE, CONTROL_MODE_AUTO);
+        builder.set(CaptureRequest.CONTROL_AF_MODE, CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+    }
+
+    /**
+     * Sets up member variables related to camera.
+     *
+     * @param width The width of available size for camera preview
+     * @param height The height of available size for camera preview
+     */
+    private void setUpCameraOutputs(int width, int height) {
+        try {
+            for (String cameraId : cm.getCameraIdList()) {
+                CameraCharacteristics characteristics = cm.getCameraCharacteristics(cameraId);
+
+                // We don't use a front facing camera in this sample.
+                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                if (facing != null && facing != mFacing) {
+                    continue;
+                }
+
+                StreamConfigurationMap map =
+                        characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                if (map == null) {
+                    continue;
+                }
+
+                // For still image captures, we use the largest available size.
+                Size largest = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
+                        new CompareSizesByArea());
+
+                // Find out if we need to swap dimension to get the preview size relative to sensor
+                // coordinate.
+                int displayRotation = ((Activity) (mContext)).getWindowManager()
+                        .getDefaultDisplay()
+                        .getRotation();
+                //noinspection ConstantConditions
+                mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+                Log.d(TAG, "device orientation : "
+                        + mSensorOrientation
+                        + "; display rotation : "
+                        + displayRotation);
+                boolean swappedDimensions = false;
+                switch (displayRotation) {
+                    case Surface.ROTATION_0:
+                    case Surface.ROTATION_180:
+                        if (mSensorOrientation == 90 || mSensorOrientation == 270) {
+                            swappedDimensions = true;
+                        }
+                        break;
+                    case Surface.ROTATION_90:
+                    case Surface.ROTATION_270:
+                        if (mSensorOrientation == 0 || mSensorOrientation == 180) {
+                            swappedDimensions = true;
+                        }
+                        break;
+                    default:
+                        Log.e(TAG, "Display rotation is invalid: " + displayRotation);
+                }
+
+                int rotatedPreviewWidth = width;
+                int rotatedPreviewHeight = height;
+
+                if (swappedDimensions) {
+                    rotatedPreviewWidth = height;
+                    rotatedPreviewHeight = width;
+                }
+
+                // Danger, W.R.! Attempting to use too large a preview size could  exceed the camera
+                // bus' bandwidth limitation, resulting in gorgeous previews but the storage of
+                // garbage capture data.
+                mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),
+                        rotatedPreviewWidth, rotatedPreviewHeight, largest);
+
+                // We fit the aspect ratio of TextureView to the size of preview we picked.
+                /*int orientation = mContext.getResources().getConfiguration().orientation;
+                if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                    mTextureView.setAspectRatio(
+                            mPreviewSize.getWidth(), mPreviewSize.getHeight());
+                } else {
+                    mTextureView.setAspectRatio(
+                            mPreviewSize.getHeight(), mPreviewSize.getWidth());
+                }*/
+
+                // Check if the flash is supported.
+                Boolean available = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+                mFlashSupported = available == null ? false : available;
+
+                mCameraId = cameraId;
+                return;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private class CameraSensorListener implements SensorEventListener {
+
+        @Override public void onSensorChanged(SensorEvent event) {
+            mSensorX = event.values[0];
+            mSensorY = event.values[1];
+        }
+
+        @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+    }
+}
