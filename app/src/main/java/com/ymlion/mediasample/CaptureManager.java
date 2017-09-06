@@ -33,12 +33,7 @@ import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
-import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,7 +43,6 @@ import java.util.List;
 
 import static android.hardware.camera2.CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE;
 import static android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO;
-import static android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM;
 
 /**
  * Created by YMlion on 2017/7/26.
@@ -110,8 +104,6 @@ public class CaptureManager {
 
     private Surface mPreviewSurface;
 
-    private File mCurrentVideo;
-
     private int mFacing = 1;
 
     private SensorManager sm;
@@ -123,6 +115,7 @@ public class CaptureManager {
     private Surface inputSurface;
     private MediaMuxer muxer;
     private int videoTrack = -1;
+    //private ImageReader imageReader;
 
     public CaptureManager(Context context, SurfaceTexture surfaceTexture) {
         this.mContext = context;
@@ -188,13 +181,21 @@ public class CaptureManager {
 
     private void setupRecord() {
         try {
-            mCurrentVideo = getFile(1);
             //out = new BufferedOutputStream(new FileOutputStream(mCurrentVideo));
             String mime = "video/avc";    //编码的MIME
             int rate = 12800000;            //波特率，12800kb
             int frameRate = 30;           //帧率，30帧
             int frameInterval = 1;        //关键帧一秒一关键帧
 
+            // TODO: 2017/9/6 同样可以使用ImageReader设置回调来获取每一帧数据，然后将数据放入codec的buffer中进行编码
+            /*imageReader = ImageReader.newInstance(1920, 1080, ImageFormat.YUV_420_888, 2);
+            HandlerThread thread = new HandlerThread("CaptureManager");
+            thread.start();
+            imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+                @Override public void onImageAvailable(ImageReader reader) {
+                    Log.d(TAG, "onImageAvailable: ");
+                }
+            }, new Handler(thread.getLooper()));*/
             //和音频编码一样，设置编码格式，获取编码器实例
             MediaFormat format = MediaFormat.createVideoFormat(mime, 1920, 1080);
             format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
@@ -203,7 +204,8 @@ public class CaptureManager {
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
                     MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
             encoder = MediaCodec.createEncoderByType("video/avc");
-            muxer = new MediaMuxer(mCurrentVideo.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            muxer = new MediaMuxer(getFile(1).getAbsolutePath(),
+                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
             encoder.setCallback(new MediaCodec.Callback() {
                 @Override public void onInputBufferAvailable(MediaCodec codec, int index) {
                     Log.d(TAG, "onInputBufferAvailable: " + index);
@@ -245,13 +247,11 @@ public class CaptureManager {
                     codec.releaseOutputBuffer(index, false);
                 }
 
-                @Override public void onError(MediaCodec codec,
-                        MediaCodec.CodecException e) {
+                @Override public void onError(MediaCodec codec, MediaCodec.CodecException e) {
 
                 }
 
-                @Override public void onOutputFormatChanged(MediaCodec codec,
-                        MediaFormat format) {
+                @Override public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
 
                 }
             });
@@ -325,6 +325,7 @@ public class CaptureManager {
                             mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
                     builder.addTarget(mPreviewSurface);
                     builder.addTarget(inputSurface);
+                    //builder.addTarget(imageReader.getSurface());
                     mCaptureSession.setRepeatingRequest(builder.build(), mCaptureCallback, null);
                     encoder.start();
                 } else {
@@ -344,12 +345,14 @@ public class CaptureManager {
     }
 
     private class CaptureCallback extends CameraCaptureSession.CaptureCallback {
-        @Override public void onCaptureProgressed(CameraCaptureSession session,
-                CaptureRequest request, CaptureResult partialResult) {
+        @Override
+        public void onCaptureProgressed(CameraCaptureSession session, CaptureRequest request,
+                CaptureResult partialResult) {
         }
 
-        @Override public void onCaptureCompleted(CameraCaptureSession session,
-                CaptureRequest request, TotalCaptureResult result) {
+        @Override
+        public void onCaptureCompleted(CameraCaptureSession session, CaptureRequest request,
+                TotalCaptureResult result) {
         }
     }
 
