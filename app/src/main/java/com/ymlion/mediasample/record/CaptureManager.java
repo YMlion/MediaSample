@@ -1,10 +1,13 @@
-package com.ymlion.mediasample;
+package com.ymlion.mediasample.record;
 
 import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.ImageFormat;
+import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -19,10 +22,15 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.media.Image;
+import android.media.ImageReader;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
+import android.media.MediaRecorder;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
@@ -33,13 +41,17 @@ import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
+import com.ymlion.mediasample.util.CodecCallback;
+import com.ymlion.mediasample.util.ImageUtil;
 import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import org.jetbrains.annotations.Nullable;
 
 import static android.hardware.camera2.CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE;
 import static android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO;
@@ -48,7 +60,7 @@ import static android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO;
  * Created by YMlion on 2017/7/26.
  */
 
-public class CaptureManager {
+public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
 
     private static final String TAG = "CaptureManager";
     /**
@@ -111,11 +123,15 @@ public class CaptureManager {
     private float mSensorX;
     private float mSensorY;
 
-    private MediaCodec encoder;
+    private MediaCodec videoEncoder;
+    private MediaCodec audioEncoder;
     private Surface inputSurface;
     private MediaMuxer muxer;
     private int videoTrack = -1;
-    //private ImageReader imageReader;
+    private int audioTrack = -1;
+    private ImageReader imageReader;
+    private AudioRecord audioRecord;
+    private int audioBufferSize;
 
     public CaptureManager(Context context, SurfaceTexture surfaceTexture) {
         this.mContext = context;
@@ -125,6 +141,7 @@ public class CaptureManager {
         HandlerThread thread = new HandlerThread("CaptureManager");
         thread.start();
         mThreadHandler = new Handler(thread.getLooper());
+        //mTexture.setOnFrameAvailableListener(this, mThreadHandler);
     }
 
     /**
@@ -170,7 +187,7 @@ public class CaptureManager {
         mState = STATE_RECORDING;
         setupRecord();
         try {
-            inputSurface = encoder.createInputSurface();
+            inputSurface = videoEncoder.createInputSurface();
             List<Surface> surfaces = Arrays.asList(mPreviewSurface, inputSurface);
             mCameraDevice.createCaptureSession(surfaces, new SessionStateCallback(),
                     mThreadHandler);
@@ -181,60 +198,89 @@ public class CaptureManager {
 
     private void setupRecord() {
         try {
-            //out = new BufferedOutputStream(new FileOutputStream(mCurrentVideo));
-            String mime = "video/avc";    //编码的MIME
-            int rate = 12800000;            //波特率，12800kb
-            int frameRate = 30;           //帧率，30帧
-            int frameInterval = 1;        //关键帧一秒一关键帧
-
-            // TODO: 2017/9/6 同样可以使用ImageReader设置回调来获取每一帧数据，然后将数据放入codec的buffer中进行编码
-            /*imageReader = ImageReader.newInstance(1920, 1080, ImageFormat.YUV_420_888, 2);
-            HandlerThread thread = new HandlerThread("CaptureManager");
-            thread.start();
-            imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
-                @Override public void onImageAvailable(ImageReader reader) {
-                    Log.d(TAG, "onImageAvailable: ");
-                }
-            }, new Handler(thread.getLooper()));*/
-            //和音频编码一样，设置编码格式，获取编码器实例
-            MediaFormat format = MediaFormat.createVideoFormat(mime, 1920, 1080);
-            format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
-            format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
-            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, frameInterval);
-            format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-            encoder = MediaCodec.createEncoderByType("video/avc");
             muxer = new MediaMuxer(getFile(1).getAbsolutePath(),
                     MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-            encoder.setCallback(new MediaCodec.Callback() {
-                @Override public void onInputBufferAvailable(MediaCodec codec, int index) {
-                    Log.d(TAG, "onInputBufferAvailable: " + index);
-                }
+            setupVideoEncoder();
+            setupAudioEncoder();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
-                @Override public void onOutputBufferAvailable(MediaCodec codec, int index,
-                        MediaCodec.BufferInfo info) {
-                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        encoder.stop();
-                        inputSurface.release();
-                        encoder.release();
-                        muxer.stop();
-                        muxer.release();
-                        /*try {
-                            out.close();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }*/
-                        return;
-                    }
-                    if (index >= 0) {
-                        if (videoTrack < 0) {
-                            videoTrack = muxer.addTrack(encoder.getOutputFormat());
-                            Log.d(TAG, " video track is " + videoTrack);
-                            muxer.start();
-                        }
-                        ByteBuffer buffer = codec.getOutputBuffer(index);
-                        muxer.writeSampleData(videoTrack, buffer, info);
-                        // 直接写入文件的是未封装的h264数据
+    private void setupAudioEncoder() throws IOException {
+        int sampleRate = 44100;   //采样率，默认44.1k
+        int channelCount = 2;     //音频采样通道，默认2通道
+        int channelConfig = AudioFormat.CHANNEL_IN_STEREO;        //通道设置，默认立体声
+        final int audioFormat = AudioFormat.ENCODING_PCM_16BIT;     //设置采样数据格式，默认16比特PCM
+        String mime = "audio/mp4a-latm";    //录音编码的mime
+        int rate = 256000;                    //编码的key bit rate
+
+        audioBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2;
+
+        //实例化AudioRecord
+        audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, channelConfig,
+                audioFormat, audioBufferSize);
+
+        MediaFormat format = MediaFormat.createAudioFormat(mime, sampleRate, channelCount);
+        format.setInteger(MediaFormat.KEY_AAC_PROFILE,
+                MediaCodecInfo.CodecProfileLevel.AACObjectLC);
+        format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
+        audioEncoder = MediaCodec.createEncoderByType(mime);
+        audioEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        audioEncoder.setCallback(new CodecCallback() {
+            @Override public void onInputBufferAvailable(MediaCodec codec, int index) {
+                ByteBuffer buffer = codec.getInputBuffer(index);
+                int readLength = audioRecord.read(buffer, audioBufferSize);
+                if (readLength > 0) {
+                    codec.queueInputBuffer(index, 0, readLength, System.nanoTime() / 1000, 0);
+                }
+            }
+
+            @Override public void onOutputBufferAvailable(MediaCodec codec, int index,
+                    MediaCodec.BufferInfo info) {
+                if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                    return;
+                }
+                if (index >= 0 && videoTrack >= 0) {
+                    ByteBuffer buffer = codec.getOutputBuffer(index);
+                    muxer.writeSampleData(audioTrack, buffer, info);
+                }
+                codec.releaseOutputBuffer(index, false);
+            }
+
+            @Override
+            public void onOutputFormatChanged(MediaCodec codec, @Nullable MediaFormat format) {
+                if (format == null) {
+                    format = audioEncoder.getOutputFormat();
+                }
+                audioTrack = muxer.addTrack(format);
+                if (videoTrack >= 0) {
+                    muxer.start();
+                }
+            }
+        });
+    }
+
+    private void setupVideoEncoder() throws IOException {
+        String mime = "video/avc";    //编码的MIME
+        int rate = 12800000;            //波特率，12800kb
+        int frameRate = 30;           //帧率，30帧
+        int frameInterval = 1;        //关键帧一秒一关键帧
+
+        MediaFormat format = MediaFormat.createVideoFormat(mime, 1920, 1080);
+        format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
+        format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
+        format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, frameInterval);
+        format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
+                MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+        videoEncoder = MediaCodec.createEncoderByType("video/avc");
+        videoEncoder.setCallback(new CodecCallback() {
+            @Override public void onOutputBufferAvailable(MediaCodec codec, int index,
+                    MediaCodec.BufferInfo info) {
+                if (index >= 0 && audioTrack >= 0) {
+                    ByteBuffer buffer = codec.getOutputBuffer(index);
+                    muxer.writeSampleData(videoTrack, buffer, info);
+                    // 直接写入文件的是未封装的h264数据
                         /*byte[] bytes = new byte[info.size];
                         buffer.get(bytes);
                         try {
@@ -243,30 +289,43 @@ public class CaptureManager {
                         } catch (IOException e) {
                             e.printStackTrace();
                         }*/
-                    }
-                    codec.releaseOutputBuffer(index, false);
                 }
-
-                @Override public void onError(MediaCodec codec, MediaCodec.CodecException e) {
-
+                codec.releaseOutputBuffer(index, false);
+                if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                    videoEncoder.stop();
+                    inputSurface.release();
+                    videoEncoder.release();
+                    audioEncoder.stop();
+                    audioEncoder.release();
+                    audioRecord.stop();
+                    audioRecord.release();
+                    muxer.stop();
+                    muxer.release();
                 }
+            }
 
-                @Override public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
-
+            @Override public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
+                if (format == null) {
+                    format = videoEncoder.getOutputFormat();
                 }
-            });
-            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+                Log.d(TAG, "onOutputFormatChanged: " + format);
+                videoTrack = muxer.addTrack(format);
+                Log.d(TAG, " video track is " + videoTrack);
+                if (audioTrack >= 0) {
+                    muxer.start();
+                }
+            }
+        });
+        videoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
     }
 
     public void stopRecord() {
         Log.d(TAG, "stopRecord");
         mState = STATE_RECORDED;
-        encoder.signalEndOfInputStream();
+        videoEncoder.signalEndOfInputStream();
         try {
             List<Surface> surfaces = Collections.singletonList(mPreviewSurface);
+            //List<Surface> surfaces = Collections.singletonList(imageReader.getSurface());
             mCameraDevice.createCaptureSession(surfaces, new SessionStateCallback(),
                     mThreadHandler);
         } catch (CameraAccessException e) {
@@ -282,6 +341,38 @@ public class CaptureManager {
             mCameraDevice.close();
         }
         sm.unregisterListener(mSensorListener);
+        if (imageReader != null) {
+            imageReader.close();
+        }
+    }
+
+    @Override public void onFrameAvailable(SurfaceTexture surface) {
+        Log.i(TAG, "onFrameAvailable: " + surface.getTimestamp());
+    }
+
+    private void setupImageReader() {
+        // TODO: 2017/9/6 同样可以使用ImageReader设置回调来获取每一帧数据，然后将数据放入codec的buffer中进行编码
+        // FIXME: 2017/9/7 使用ImageReader获取每一帧数据特别卡顿，暂时没有找到解决方法。
+        imageReader = ImageReader.newInstance(1920, 1080, ImageFormat.YUV_420_888/*PixelFormat.RGBX_8888*/,
+                1);
+        HandlerThread thread = new HandlerThread("ImageReader");
+        thread.start();
+        Handler handler = new Handler(thread.getLooper());
+        final Paint paint = new Paint();
+        imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+            @Override public void onImageAvailable(ImageReader reader) {
+                Image image = reader.acquireNextImage();
+                Log.e(TAG, "onImageAvailable: image format is " + image.getFormat());
+                Bitmap bm = ImageUtil.INSTANCE.getBitmap(image);
+                if (bm == null) {
+                    Log.e(TAG, "onImageAvailable: null");
+                    return;
+                }
+                Canvas canvas = mPreviewSurface.lockCanvas(null);
+                canvas.drawBitmap(bm, 0, 0, paint);
+                mPreviewSurface.unlockCanvasAndPost(canvas);
+            }
+        }, handler);
     }
 
     private class DeviceStateCallback extends CameraDevice.StateCallback {
@@ -294,11 +385,14 @@ public class CaptureManager {
                 mTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
                 Log.d(TAG, "onOpened: texture size : " + mPreviewSize);
 
+                //setupImageReader();
                 mRequestBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                 mPreviewSurface = new Surface(mTexture);
                 mRequestBuilder.addTarget(mPreviewSurface);
+                //mRequestBuilder.addTarget(imageReader.getSurface());
                 List<Surface> surfaces = new ArrayList<>();
                 surfaces.add(mPreviewSurface);
+                //surfaces.add(imageReader.getSurface());
                 camera.createCaptureSession(surfaces, new SessionStateCallback(), mThreadHandler);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -325,9 +419,10 @@ public class CaptureManager {
                             mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
                     builder.addTarget(mPreviewSurface);
                     builder.addTarget(inputSurface);
-                    //builder.addTarget(imageReader.getSurface());
                     mCaptureSession.setRepeatingRequest(builder.build(), mCaptureCallback, null);
-                    encoder.start();
+                    videoEncoder.start();
+                    audioRecord.startRecording();
+                    audioEncoder.start();
                 } else {
                     setupRequest(mRequestBuilder);
                     mCaptureCallback = new CaptureCallback();
@@ -524,16 +619,6 @@ public class CaptureManager {
                 // garbage capture data.
                 mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),
                         rotatedPreviewWidth, rotatedPreviewHeight, largest);
-
-                // We fit the aspect ratio of TextureView to the size of preview we picked.
-                /*int orientation = mContext.getResources().getConfiguration().orientation;
-                if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                    mTextureView.setAspectRatio(
-                            mPreviewSize.getWidth(), mPreviewSize.getHeight());
-                } else {
-                    mTextureView.setAspectRatio(
-                            mPreviewSize.getHeight(), mPreviewSize.getWidth());
-                }*/
 
                 // Check if the flash is supported.
                 Boolean available = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);

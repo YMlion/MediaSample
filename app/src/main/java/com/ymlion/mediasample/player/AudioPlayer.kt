@@ -1,4 +1,4 @@
-package com.ymlion.mediasample
+package com.ymlion.mediasample.player
 
 import android.media.AudioFormat
 import android.media.AudioManager

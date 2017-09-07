@@ -1,4 +1,4 @@
-package com.ymlion.mediasample
+package com.ymlion.mediasample.player
 
 import android.app.Activity
 import android.content.Intent
@@ -22,6 +22,9 @@ import android.widget.FrameLayout
 import android.widget.FrameLayout.LayoutParams
 import android.widget.SeekBar
 import android.widget.SeekBar.OnSeekBarChangeListener
+import com.ymlion.mediasample.R.id
+import com.ymlion.mediasample.R.layout
+import com.ymlion.mediasample.util.ImageUtil
 import kotlinx.android.synthetic.main.activity_main.btn_file
 import kotlinx.android.synthetic.main.activity_main.btn_play
 import kotlinx.android.synthetic.main.activity_main.btn_stop
@@ -33,7 +36,7 @@ import kotlinx.android.synthetic.main.activity_main.tv_play_time
 import kotlinx.android.synthetic.main.activity_main.tv_total_time
 import kotlin.concurrent.thread
 
-class MainActivity : Activity(), OnClickListener {
+class VideoPlayActivity : Activity(), OnClickListener {
     var playEnd = true
     var filePath = ""
     var audioPlayer: AudioPlayer = AudioPlayer()
@@ -43,7 +46,7 @@ class MainActivity : Activity(), OnClickListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(layout.activity_main)
         textureView.isOpaque = false
         filePath = Environment.getExternalStorageDirectory().absolutePath + "/download/video10s.mp4"
         tv_path.text = filePath
@@ -67,7 +70,7 @@ class MainActivity : Activity(), OnClickListener {
 
     override fun onClick(v: View?) {
         when (v!!.id) {
-            R.id.btn_play -> {
+            id.btn_play -> {
                 if (playEnd) {
                     resumePosition = 0L
                     thread {
@@ -86,13 +89,13 @@ class MainActivity : Activity(), OnClickListener {
                     audioPlayer.pause()
                 }
             }
-            R.id.btn_file -> {
+            id.btn_file -> {
                 val intent = Intent()
                 intent.type = "video/*"
                 intent.action = Intent.ACTION_GET_CONTENT
                 startActivityForResult(intent, 1)
             }
-            R.id.btn_stop -> {
+            id.btn_stop -> {
                 if (playEnd) {
                     if (btn_stop.text.toString() == "Stop") {
                         return

@@ -1,5 +1,7 @@
-package com.ymlion.mediasample
+package com.ymlion.mediasample.util
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.media.Image
 import android.os.Environment
@@ -8,11 +10,8 @@ import android.util.Log
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.IOException
-import java.io.OutputStream
 import android.graphics.YuvImage
-
-
+import java.io.ByteArrayOutputStream
 
 
 /**
@@ -41,16 +40,12 @@ object ImageUtil {
         if (image == null) {
             return
         }
-
-        val buffer = image.planes[0].buffer
-        val bytes = ByteArray(buffer.remaining())
-        Log.d("TAG", "image size: " + bytes.size)
-        buffer.get(bytes)
         val file = getFile(0)
         try {
             var outputStream = BufferedOutputStream(FileOutputStream(file))
             val rect = image.cropRect
-            val yuvImage = YuvImage(getDataFromImage(image, COLOR_FormatNV21), ImageFormat.NV21,
+            val yuvImage = YuvImage(getDataFromImage(image,
+                    COLOR_FormatNV21), ImageFormat.NV21,
                     rect.width(), rect.height(), null)
             yuvImage.compressToJpeg(rect, 100, outputStream)
             Log.d("TAG", "frame saved in ${file.absolutePath}")
@@ -59,6 +54,29 @@ object ImageUtil {
         } finally {
             image.close()
         }
+    }
+
+    fun getBitmap(image: Image?): Bitmap? {
+        if (image == null) {
+            return null
+        }
+        try {
+            val data = getDataFromImage(image,
+                    COLOR_FormatNV21)
+            var outputStream = ByteArrayOutputStream()
+            val rect = image.cropRect
+            val yuvImage = YuvImage(data, ImageFormat.NV21,
+                    rect.width(), rect.height(), null)
+            yuvImage.compressToJpeg(rect, 100, outputStream)
+            var bm = BitmapFactory.decodeByteArray(outputStream.toByteArray(), 0, outputStream.size())
+            image.close()
+            return bm
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            image.close()
+        }
+        return null
     }
 
     private fun getDataFromImage(image: Image, colorFormat: Int): ByteArray {

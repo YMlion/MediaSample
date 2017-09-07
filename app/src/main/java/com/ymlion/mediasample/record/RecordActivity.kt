@@ -1,4 +1,4 @@
-package com.ymlion.mediasample
+package com.ymlion.mediasample.record
 
 import android.Manifest
 import android.app.Activity
@@ -10,6 +10,8 @@ import android.os.CountDownTimer
 import android.util.Log
 import android.view.TextureView
 import android.view.View
+import com.ymlion.mediasample.record.CaptureManager
+import com.ymlion.mediasample.R.layout
 import kotlinx.android.synthetic.main.activity_record.record_seconds_tv
 import kotlinx.android.synthetic.main.activity_record.textureView
 
@@ -20,7 +22,7 @@ class RecordActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_record)
+        setContentView(layout.activity_record)
         initView()
     }
 
@@ -61,7 +63,7 @@ class RecordActivity : Activity() {
             }
 
             override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
-
+//                Log.v("TAG", "onSurfaceTextureUpdated")
             }
         }
     }
