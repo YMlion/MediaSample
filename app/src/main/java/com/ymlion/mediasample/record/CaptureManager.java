@@ -213,6 +213,7 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
     }
 
     private void setupAudioEncoder() throws IOException {
+        audioTrack = -1;
         int sampleRate = 48000;   //采样率，默认48k
         int channelCount = 2;     //音频采样通道，默认2通道
         int channelConfig = AudioFormat.CHANNEL_IN_STEREO;        //通道设置，默认立体声
@@ -247,6 +248,7 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
                     format = audioEncoder.getOutputFormat();
                 }
                 audioTrack = muxer.addTrack(format);
+                Log.d(TAG, "audio track is " + audioTrack);
                 if (videoTrack >= 0) {
                     muxer.start();
                 }
@@ -254,20 +256,32 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
         });
         if (audioHandler == null) {
             audioHandler = createHandler("audio", new Handler.Callback() {
+                long startTime = 0L;
                 @Override public boolean handleMessage(Message msg) {
+                    if (recordStop) {
+                        startTime = 0;
+                        return false;
+                    }
                     int what = msg.what;
                     int index = msg.arg1;
                     if (what == 1) {
                         ByteBuffer buffer = audioEncoder.getInputBuffer(index);
                         int readLength = audioRecord.read(buffer, audioBufferSize);
+                        Log.d(TAG, "handleMessage: is this run " + readLength);
                         if (readLength > 0) {
-                            audioEncoder.queueInputBuffer(index, 0, readLength,
-                                    System.nanoTime() / 1000, 0);
+                            if (startTime == 0) {
+                                startTime = System.nanoTime() / 1000;
+                            }
+                            long presentationTimeUs = System.nanoTime() / 1000 - startTime;
+                            Log.d(TAG, "handleMessage: " + presentationTimeUs);
+                            audioEncoder.queueInputBuffer(index, 0, readLength, presentationTimeUs,
+                                    0);
                         }
                         return true;
                     } else if (what == 2) {
                         MediaCodec.BufferInfo info = (MediaCodec.BufferInfo) msg.obj;
                         if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                            startTime = 0;
                             return true;
                         }
                         if (index >= 0 && videoTrack >= 0) {
@@ -285,6 +299,7 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
     }
 
     private void setupVideoEncoder() throws IOException {
+        videoTrack = -1;
         String mime = "video/avc";    //编码的MIME
         int rate = 12800000;            //波特率，12800kb
         int frameRate = 30;           //帧率，30帧
@@ -324,6 +339,7 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
                     if (what == 1) {
                         int index = msg.arg1;
                         MediaCodec.BufferInfo info = (MediaCodec.BufferInfo) msg.obj;
+                        //Log.d(TAG, "info flags is " + info.flags + "; index is " + index);
                         if (index >= 0 && audioTrack >= 0) {
                             if (startTime == 0) {
                                 startTime = info.presentationTimeUs;
