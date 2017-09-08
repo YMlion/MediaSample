@@ -35,6 +35,7 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Message;
 import android.text.format.DateFormat;
 import android.util.Log;
 import android.util.Size;
@@ -132,6 +133,9 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
     private ImageReader imageReader;
     private AudioRecord audioRecord;
     private int audioBufferSize;
+    private Handler videoHandler;
+    private Handler audioHandler;
+    private boolean recordStop = false;
 
     public CaptureManager(Context context, SurfaceTexture surfaceTexture) {
         this.mContext = context;
@@ -185,6 +189,7 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
     public void startRecord() {
         Log.d(TAG, "startRecord");
         mState = STATE_RECORDING;
+        recordStop = false;
         setupRecord();
         try {
             inputSurface = videoEncoder.createInputSurface();
@@ -208,12 +213,12 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
     }
 
     private void setupAudioEncoder() throws IOException {
-        int sampleRate = 44100;   //采样率，默认44.1k
+        int sampleRate = 48000;   //采样率，默认48k
         int channelCount = 2;     //音频采样通道，默认2通道
         int channelConfig = AudioFormat.CHANNEL_IN_STEREO;        //通道设置，默认立体声
         final int audioFormat = AudioFormat.ENCODING_PCM_16BIT;     //设置采样数据格式，默认16比特PCM
-        String mime = "audio/mp4a-latm";    //录音编码的mime
-        int rate = 256000;                    //编码的key bit rate
+        final String mime = "audio/mp4a-latm";    //录音编码的mime
+        int rate = 128000;                    //编码的key bit rate
 
         audioBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2;
 
@@ -226,26 +231,14 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
                 MediaCodecInfo.CodecProfileLevel.AACObjectLC);
         format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
         audioEncoder = MediaCodec.createEncoderByType(mime);
-        audioEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         audioEncoder.setCallback(new CodecCallback() {
             @Override public void onInputBufferAvailable(MediaCodec codec, int index) {
-                ByteBuffer buffer = codec.getInputBuffer(index);
-                int readLength = audioRecord.read(buffer, audioBufferSize);
-                if (readLength > 0) {
-                    codec.queueInputBuffer(index, 0, readLength, System.nanoTime() / 1000, 0);
-                }
+                sendMsg(1, index, null, audioHandler);
             }
 
             @Override public void onOutputBufferAvailable(MediaCodec codec, int index,
                     MediaCodec.BufferInfo info) {
-                if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                    return;
-                }
-                if (index >= 0 && videoTrack >= 0) {
-                    ByteBuffer buffer = codec.getOutputBuffer(index);
-                    muxer.writeSampleData(audioTrack, buffer, info);
-                }
-                codec.releaseOutputBuffer(index, false);
+                sendMsg(2, index, info, audioHandler);
             }
 
             @Override
@@ -259,6 +252,36 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
                 }
             }
         });
+        if (audioHandler == null) {
+            audioHandler = createHandler("audio", new Handler.Callback() {
+                @Override public boolean handleMessage(Message msg) {
+                    int what = msg.what;
+                    int index = msg.arg1;
+                    if (what == 1) {
+                        ByteBuffer buffer = audioEncoder.getInputBuffer(index);
+                        int readLength = audioRecord.read(buffer, audioBufferSize);
+                        if (readLength > 0) {
+                            audioEncoder.queueInputBuffer(index, 0, readLength,
+                                    System.nanoTime() / 1000, 0);
+                        }
+                        return true;
+                    } else if (what == 2) {
+                        MediaCodec.BufferInfo info = (MediaCodec.BufferInfo) msg.obj;
+                        if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                            return true;
+                        }
+                        if (index >= 0 && videoTrack >= 0) {
+                            ByteBuffer buffer = audioEncoder.getOutputBuffer(index);
+                            muxer.writeSampleData(audioTrack, buffer, info);
+                        }
+                        audioEncoder.releaseOutputBuffer(index, false);
+                        return true;
+                    }
+                    return false;
+                }
+            });
+        }
+        audioEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
     }
 
     private void setupVideoEncoder() throws IOException {
@@ -277,31 +300,7 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
         videoEncoder.setCallback(new CodecCallback() {
             @Override public void onOutputBufferAvailable(MediaCodec codec, int index,
                     MediaCodec.BufferInfo info) {
-                if (index >= 0 && audioTrack >= 0) {
-                    ByteBuffer buffer = codec.getOutputBuffer(index);
-                    muxer.writeSampleData(videoTrack, buffer, info);
-                    // 直接写入文件的是未封装的h264数据
-                        /*byte[] bytes = new byte[info.size];
-                        buffer.get(bytes);
-                        try {
-                            out.write(bytes);
-                            out.flush();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }*/
-                }
-                codec.releaseOutputBuffer(index, false);
-                if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                    videoEncoder.stop();
-                    inputSurface.release();
-                    videoEncoder.release();
-                    audioEncoder.stop();
-                    audioEncoder.release();
-                    audioRecord.stop();
-                    audioRecord.release();
-                    muxer.stop();
-                    muxer.release();
-                }
+                sendMsg(1, index, info, videoHandler);
             }
 
             @Override public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
@@ -316,7 +315,71 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
                 }
             }
         });
+        if (videoHandler == null) {
+            videoHandler = createHandler("video", new Handler.Callback() {
+                long startTime = 0L;
+
+                @Override public boolean handleMessage(Message msg) {
+                    int what = msg.what;
+                    if (what == 1) {
+                        int index = msg.arg1;
+                        MediaCodec.BufferInfo info = (MediaCodec.BufferInfo) msg.obj;
+                        if (index >= 0 && audioTrack >= 0) {
+                            if (startTime == 0) {
+                                startTime = info.presentationTimeUs;
+                            }
+                            if (info.presentationTimeUs > 0) {
+                                info.presentationTimeUs -= startTime;
+                                ByteBuffer buffer = videoEncoder.getOutputBuffer(index);
+                                muxer.writeSampleData(videoTrack, buffer, info);
+                                // 直接写入文件的是未封装的h264数据
+                                /*byte[] bytes = new byte[info.size];
+                                buffer.get(bytes);
+                                    try {
+                                    out.write(bytes);
+                                    out.flush();
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }*/
+                            }
+                        }
+                        videoEncoder.releaseOutputBuffer(index, false);
+                        if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                            recordStop = true;
+                            videoEncoder.stop();
+                            inputSurface.release();
+                            videoEncoder.release();
+                            audioEncoder.stop();
+                            audioEncoder.release();
+                            audioRecord.stop();
+                            audioRecord.release();
+                            muxer.stop();
+                            muxer.release();
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+            });
+        }
         videoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+    }
+
+    private void sendMsg(int what, int index, Object obj, Handler handler) {
+        if (recordStop) {
+            return;
+        }
+        Message msg = new Message();
+        msg.what = what;
+        msg.arg1 = index;
+        msg.obj = obj;
+        handler.sendMessage(msg);
+    }
+
+    private Handler createHandler(String name, Handler.Callback callback) {
+        HandlerThread thread = new HandlerThread(name);
+        thread.start();
+        return new Handler(thread.getLooper(), callback);
     }
 
     public void stopRecord() {
