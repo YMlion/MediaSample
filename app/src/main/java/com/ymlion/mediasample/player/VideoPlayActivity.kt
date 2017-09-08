@@ -22,13 +22,16 @@ import android.widget.FrameLayout
 import android.widget.FrameLayout.LayoutParams
 import android.widget.SeekBar
 import android.widget.SeekBar.OnSeekBarChangeListener
+import android.widget.Toast
 import com.ymlion.mediasample.R.id
 import com.ymlion.mediasample.R.layout
+import com.ymlion.mediasample.util.FileUtil
 import com.ymlion.mediasample.util.ImageUtil
 import kotlinx.android.synthetic.main.activity_main.btn_file
 import kotlinx.android.synthetic.main.activity_main.btn_play
 import kotlinx.android.synthetic.main.activity_main.btn_stop
 import kotlinx.android.synthetic.main.activity_main.frame_layout
+import kotlinx.android.synthetic.main.activity_main.iv_shot
 import kotlinx.android.synthetic.main.activity_main.sb_time
 import kotlinx.android.synthetic.main.activity_main.textureView
 import kotlinx.android.synthetic.main.activity_main.tv_path
@@ -68,10 +71,22 @@ class VideoPlayActivity : Activity(), OnClickListener {
         })
     }
 
+    override fun onPause() {
+        super.onPause()
+        if (!playEnd) {
+            btn_stop.performClick()
+        }
+    }
+
     override fun onClick(v: View?) {
         when (v!!.id) {
             id.btn_play -> {
                 if (playEnd) {
+                    if (!FileUtil.isFile(filePath)) {
+                        Toast.makeText(this, "no such file", Toast.LENGTH_SHORT).show()
+                        return
+                    }
+                    iv_shot.visibility = View.GONE
                     resumePosition = 0L
                     thread {
                         audioPlayer.start(filePath)
@@ -196,7 +211,10 @@ class VideoPlayActivity : Activity(), OnClickListener {
                 }
                 if (capture) {
                     var image = codec.getOutputImage(index)
-                    ImageUtil.saveImage(image)
+                    var bm = ImageUtil.getBitmap(image)
+                    runOnUiThread {
+                        iv_shot.setImageBitmap(bm)
+                    }
                     codec.releaseOutputBuffer(index, false)
                     playEnd = true
                     break
@@ -314,6 +332,7 @@ class VideoPlayActivity : Activity(), OnClickListener {
         lp.height = dh
         lp.gravity = Gravity.CENTER
         textureView.layoutParams = lp
+        iv_shot.layoutParams = lp
     }
 
     private fun checkCoder(mime: String, encoder: Boolean) {
@@ -361,6 +380,7 @@ class VideoPlayActivity : Activity(), OnClickListener {
                 btn_play.text = "Play"
                 btn_stop.text = "Stop"
                 totalTime = 0L
+                iv_shot.visibility = View.VISIBLE
                 playVideo(null, true)
             }
             if (!cursor.isClosed) {
