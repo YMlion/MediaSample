@@ -27,16 +27,16 @@ import com.ymlion.mediasample.R.id
 import com.ymlion.mediasample.R.layout
 import com.ymlion.mediasample.util.FileUtil
 import com.ymlion.mediasample.util.ImageUtil
-import kotlinx.android.synthetic.main.activity_main.btn_file
-import kotlinx.android.synthetic.main.activity_main.btn_play
-import kotlinx.android.synthetic.main.activity_main.btn_stop
-import kotlinx.android.synthetic.main.activity_main.frame_layout
-import kotlinx.android.synthetic.main.activity_main.iv_shot
-import kotlinx.android.synthetic.main.activity_main.sb_time
-import kotlinx.android.synthetic.main.activity_main.textureView
-import kotlinx.android.synthetic.main.activity_main.tv_path
-import kotlinx.android.synthetic.main.activity_main.tv_play_time
-import kotlinx.android.synthetic.main.activity_main.tv_total_time
+import kotlinx.android.synthetic.main.activity_video_play.btn_file
+import kotlinx.android.synthetic.main.activity_video_play.btn_play
+import kotlinx.android.synthetic.main.activity_video_play.btn_stop
+import kotlinx.android.synthetic.main.activity_video_play.frame_layout
+import kotlinx.android.synthetic.main.activity_video_play.iv_shot
+import kotlinx.android.synthetic.main.activity_video_play.sb_time
+import kotlinx.android.synthetic.main.activity_video_play.surfaceView
+import kotlinx.android.synthetic.main.activity_video_play.tv_path
+import kotlinx.android.synthetic.main.activity_video_play.tv_play_time
+import kotlinx.android.synthetic.main.activity_video_play.tv_total_time
 import kotlin.concurrent.thread
 
 class VideoPlayActivity : Activity(), OnClickListener {
@@ -49,8 +49,8 @@ class VideoPlayActivity : Activity(), OnClickListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(layout.activity_main)
-        textureView.isOpaque = false
+        setContentView(layout.activity_video_play)
+        //        textureView.isOpaque = false
         filePath = Environment.getExternalStorageDirectory().absolutePath + "/download/video10s.mp4"
         tv_path.text = filePath
         btn_file.setOnClickListener(this)
@@ -91,7 +91,7 @@ class VideoPlayActivity : Activity(), OnClickListener {
                     thread {
                         audioPlayer.start(filePath)
                     }
-                    playVideo(Surface(textureView.surfaceTexture), false)
+                    playVideo(surfaceView.holder.surface, false)
 
                     btn_play.text = "Pause"
                 } else {
@@ -118,7 +118,7 @@ class VideoPlayActivity : Activity(), OnClickListener {
                     thread {
                         audioPlayer.resume(filePath)
                     }
-                    playVideo(Surface(textureView.surfaceTexture), false)
+                    playVideo(surfaceView.holder.surface, false)
                     btn_play.text = "Pause"
                     btn_stop.text = "Stop"
                     Log.d("TAG", " resume position is $resumePosition")
@@ -295,7 +295,7 @@ class VideoPlayActivity : Activity(), OnClickListener {
             vh = tmp
         }
         Log.d("TAG",
-                "video width : $vw; height : $vh; texture width : ${textureView.width}; height : ${textureView.height} ")
+                "video width : $vw; height : $vh; texture width : ${surfaceView.width}; height : ${surfaceView.height} ")
 
         val sw = frame_layout.width
         val sh = frame_layout.height
@@ -327,11 +327,11 @@ class VideoPlayActivity : Activity(), OnClickListener {
             }
         }
         Log.d("TAG", "display width : $dw; height : $dh")
-        var lp: FrameLayout.LayoutParams = textureView.layoutParams as LayoutParams
+        var lp: FrameLayout.LayoutParams = surfaceView.layoutParams as LayoutParams
         lp.width = dw
         lp.height = dh
         lp.gravity = Gravity.CENTER
-        textureView.layoutParams = lp
+        surfaceView.layoutParams = lp
         iv_shot.layoutParams = lp
     }
 
