@@ -61,9 +61,9 @@ import static android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO;
  * Created by YMlion on 2017/7/26.
  */
 
-public class CaptureManager {
+public class RecordManager {
 
-    private static final String TAG = "CaptureManager";
+    private static final String TAG = "RecordManager";
     /**
      * Conversion from screen rotation to JPEG orientation.
      */
@@ -137,12 +137,12 @@ public class CaptureManager {
     private Handler audioHandler;
     private boolean recordStop = false;
 
-    public CaptureManager(Context context, SurfaceTexture surfaceTexture) {
+    public RecordManager(Context context, SurfaceTexture surfaceTexture) {
         this.mContext = context;
         cm = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
         sm = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         this.mTexture = surfaceTexture;
-        HandlerThread thread = new HandlerThread("CaptureManager");
+        HandlerThread thread = new HandlerThread("RecordManager");
         thread.start();
         mThreadHandler = new Handler(thread.getLooper());
     }

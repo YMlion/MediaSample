@@ -10,14 +10,13 @@ import android.os.CountDownTimer
 import android.util.Log
 import android.view.TextureView
 import android.view.View
-import com.ymlion.mediasample.record.CaptureManager
 import com.ymlion.mediasample.R.layout
 import kotlinx.android.synthetic.main.activity_record.record_seconds_tv
 import kotlinx.android.synthetic.main.activity_record.textureView
 
 class RecordActivity : Activity() {
 
-    private lateinit var rm: CaptureManager
+    private lateinit var rm: RecordManager
     private lateinit var timer: CountDownTimer
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,7 +82,7 @@ class RecordActivity : Activity() {
     }
 
     private fun openCamera(width: Int, height: Int) {
-        rm = CaptureManager(this, textureView.surfaceTexture)
+        rm = RecordManager(this, textureView.surfaceTexture)
         Log.d("MAIN", "openCamera: texture view size : "
                 + textureView.width
                 + " ; "
