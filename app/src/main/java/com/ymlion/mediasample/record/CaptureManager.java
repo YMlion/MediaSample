@@ -61,7 +61,7 @@ import static android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO;
  * Created by YMlion on 2017/7/26.
  */
 
-public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
+public class CaptureManager {
 
     private static final String TAG = "CaptureManager";
     /**
@@ -145,7 +145,6 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
         HandlerThread thread = new HandlerThread("CaptureManager");
         thread.start();
         mThreadHandler = new Handler(thread.getLooper());
-        //mTexture.setOnFrameAvailableListener(this, mThreadHandler);
     }
 
     /**
@@ -423,10 +422,6 @@ public class CaptureManager implements SurfaceTexture.OnFrameAvailableListener {
         if (imageReader != null) {
             imageReader.close();
         }
-    }
-
-    @Override public void onFrameAvailable(SurfaceTexture surface) {
-        Log.i(TAG, "onFrameAvailable: " + surface.getTimestamp());
     }
 
     private void setupImageReader() {

@@ -40,12 +40,12 @@ import kotlinx.android.synthetic.main.activity_video_play.tv_total_time
 import kotlin.concurrent.thread
 
 class VideoPlayActivity : Activity(), OnClickListener {
-    var playEnd = true
-    var filePath = ""
-    var audioPlayer: AudioPlayer = AudioPlayer()
-    var playPause = false
-    var resumePosition = 0L
-    var totalTime = 0L
+    private var playEnd = true
+    private var filePath = ""
+    private var audioPlayer: AudioPlayer = AudioPlayer()
+    private var playPause = false
+    private var resumePosition = 0L
+    private var totalTime = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
