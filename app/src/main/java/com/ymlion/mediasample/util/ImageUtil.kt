@@ -3,15 +3,15 @@ package com.ymlion.mediasample.util
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
+import android.graphics.YuvImage
 import android.media.Image
 import android.os.Environment
 import android.text.format.DateFormat
 import android.util.Log
 import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import android.graphics.YuvImage
-import java.io.ByteArrayOutputStream
 
 
 /**
@@ -26,7 +26,7 @@ object ImageUtil {
     val FILE_TypeNV21 = 2
     val FILE_TypeJPEG = 3
 
-    private fun getFile(type: Int): File {
+    fun getFile(type: Int): File {
         val fileName = DateFormat.format("yyyyMMddHHmmss", System.currentTimeMillis()).toString()
         val dirType = if (type == 0) Environment.DIRECTORY_PICTURES else Environment.DIRECTORY_MOVIES
         val fileType = if (type == 0) ".jpg" else ".mp4"
@@ -57,6 +57,7 @@ object ImageUtil {
     }
 
     fun getBitmap(image: Image?): Bitmap? {
+        var s = System.currentTimeMillis()
         if (image == null) {
             return null
         }
@@ -70,6 +71,7 @@ object ImageUtil {
             yuvImage.compressToJpeg(rect, 100, outputStream)
             var bm = BitmapFactory.decodeByteArray(outputStream.toByteArray(), 0, outputStream.size())
             image.close()
+            Log.d("ImageUtil", "parse image use ${System.currentTimeMillis() - s}ms")
             return bm
         } catch (e: Exception) {
             e.printStackTrace()
