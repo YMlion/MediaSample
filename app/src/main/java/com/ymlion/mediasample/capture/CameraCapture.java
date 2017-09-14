@@ -60,6 +60,8 @@ import java.util.List;
     private SurfaceTexture texture;
     private Handler mHandler;
     private byte[] gBuffer;
+    private int mDisplayWidth;
+    private int mDisplayHeight;
 
     public CameraCapture(Context context) {
         mContext = new WeakReference<Context>(context);
@@ -95,6 +97,9 @@ import java.util.List;
 
         try {
             mSurface = holder;
+            Rect rect = holder.getSurfaceFrame();
+            mDisplayWidth = rect.width();
+            mDisplayHeight = rect.height();
             texture = new SurfaceTexture(10);
             mCamera = Camera.open(mCameraFacing);
             Parameters parameters = mCamera.getParameters();
@@ -118,6 +123,11 @@ import java.util.List;
             Log.i(TAG, "orientation: " + orientation);
             if (orientation > 0) {
                 mCamera.setDisplayOrientation(orientation);
+            }
+            if (orientation == 90) {
+                int tmp = mDisplayHeight;
+                mDisplayHeight = mDisplayWidth;
+                mDisplayWidth = tmp;
             }
             //mCamera.setPreviewDisplay(mSurface);
             mCamera.setPreviewTexture(texture);
@@ -303,7 +313,7 @@ import java.util.List;
 
         //        这里使用的是后置摄像头就不用翻转。由于没有进行旋转角度的兼容，这里直接传系统调整的值
         prepareMatrix(matrix, mCameraFacing == getCameraFacing(FRONT),
-                determineDisplayOrientation(), 1440, 2478);
+                determineDisplayOrientation(), mDisplayWidth, mDisplayHeight);
 
         //        canvas.save();
         //        由于有的时候手机会存在一定的偏移（歪着拿手机）所以在这里需要旋转Canvas 和 matrix，
@@ -356,7 +366,7 @@ import java.util.List;
             return false;
         }
         byte[] data = (byte[]) msg.obj;
-        Log.d(TAG, "onPreviewFrame: " + data.length);
+        //Log.d(TAG, "onPreviewFrame: " + data.length);
         Size size = mCamera.getParameters().getPreviewSize();
         //这里一定要得到系统兼容的大小，否则解析出来的是一片绿色或者其他
         YuvImage yuvImage = new YuvImage(data, ImageFormat.NV21, size.width, size.height, null);
@@ -368,6 +378,10 @@ import java.util.List;
         Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
         Matrix matrix = new Matrix();
         matrix.postRotate(determineDisplayOrientation());
+        float sx = mDisplayWidth / 1.0f / bitmap.getWidth();
+        float sy = mDisplayHeight / 1.0f / bitmap.getHeight();
+        Log.d(TAG, "handleMessage: " + mDisplayWidth + "--" + mDisplayHeight + "; " + bitmap.getWidth() + "--" + bitmap.getHeight());
+        matrix.postScale(sx, sy);
         Bitmap bm = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix,
                 true);
         Canvas canvas = mSurface.lockCanvas(null);
