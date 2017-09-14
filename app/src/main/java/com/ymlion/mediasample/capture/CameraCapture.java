@@ -1,22 +1,32 @@
 package com.ymlion.mediasample.capture;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
+import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.SurfaceTexture;
+import android.graphics.YuvImage;
 import android.hardware.Camera;
 import android.hardware.Camera.AutoFocusCallback;
 import android.hardware.Camera.CameraInfo;
 import android.hardware.Camera.Parameters;
 import android.hardware.Camera.PictureCallback;
 import android.hardware.Camera.Size;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Message;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.WindowManager;
+import java.io.ByteArrayOutputStream;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,7 +34,7 @@ import java.util.Comparator;
 import java.util.List;
 
 @SuppressWarnings("deprecation") public class CameraCapture
-        implements Camera.FaceDetectionListener {
+        implements Camera.FaceDetectionListener, Handler.Callback {
     private static final String TAG = CameraCapture.class.getSimpleName();
     public static final int FLASH_MODE_OFF = 0;
     public static final int FLASH_MODE_ON = 1;
@@ -47,9 +57,15 @@ import java.util.List;
     private SurfaceHolder mSurface;
     private Paint mPaint;
     private SurfaceHolder mFaceSurface;
+    private SurfaceTexture texture;
+    private Handler mHandler;
+    private byte[] gBuffer;
 
     public CameraCapture(Context context) {
         mContext = new WeakReference<Context>(context);
+        HandlerThread thread = new HandlerThread("surface");
+        thread.start();
+        mHandler = new Handler(thread.getLooper(), this);
     }
 
     public void setCameraType(int cameraType) {
@@ -79,6 +95,7 @@ import java.util.List;
 
         try {
             mSurface = holder;
+            texture = new SurfaceTexture(10);
             mCamera = Camera.open(mCameraFacing);
             Parameters parameters = mCamera.getParameters();
             mPictureSize = Collections.max(parameters.getSupportedPictureSizes(),
@@ -102,34 +119,20 @@ import java.util.List;
             if (orientation > 0) {
                 mCamera.setDisplayOrientation(orientation);
             }
-            mCamera.setPreviewDisplay(mSurface);
-            /*SurfaceTexture texture = new SurfaceTexture(10);
+            //mCamera.setPreviewDisplay(mSurface);
             mCamera.setPreviewTexture(texture);
-            mCamera.setPreviewCallback(new Camera.PreviewCallback() {
+            int bufferSize = mPreviewSize.width * mPreviewSize.height;
+            bufferSize =
+                    2 * bufferSize * ImageFormat.getBitsPerPixel(parameters.getPreviewFormat()) / 8;
+            gBuffer = new byte[bufferSize];
+            mCamera.addCallbackBuffer(gBuffer);
+            mCamera.setPreviewCallbackWithBuffer(new Camera.PreviewCallback() {
                 @Override public void onPreviewFrame(byte[] data, Camera camera) {
-                    Log.d(TAG, "onPreviewFrame: " + data.length);
-                    Size size = camera.getParameters().getPreviewSize();
-                    //这里一定要得到系统兼容的大小，否则解析出来的是一片绿色或者其他
-                    YuvImage yuvImage =
-                            new YuvImage(data, ImageFormat.NV21, size.width, size.height, null);
-                    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                    yuvImage.compressToJpeg(new Rect(0, 0, size.width, size.height), 80,
-                            outputStream);
-                    BitmapFactory.Options options = new BitmapFactory.Options();
-                    options.inPreferredConfig = Bitmap.Config.RGB_565;//必须设置为565，否则无法检测
-                    byte[] bytes = outputStream.toByteArray();
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
-                    Matrix matrix = new Matrix();
-                    matrix.postRotate(determineDisplayOrientation());
-                    //matrix.postScale(0.25f, 0.25f);
-                    Bitmap bm =
-                            Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(),
-                                    matrix, true);
-                    Canvas canvas = mSurface.lockCanvas(null);
-                    canvas.drawBitmap(bm, 0, 0, new Paint());
-                    mSurface.unlockCanvasAndPost(canvas);
+                    Message message = new Message();
+                    message.obj = data;
+                    mHandler.sendMessage(message);
                 }
-            });*/
+            });
             mCamera.startPreview();
             if (mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
                 mCamera.setFaceDetectionListener(this);
@@ -140,7 +143,10 @@ import java.util.List;
         }
     }
 
+    private boolean closed = false;
+
     public void close() {
+        closed = true;
         if (null != mCamera) {
             if (mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
                 mCamera.stopFaceDetection();
@@ -342,6 +348,33 @@ import java.util.List;
         mPaint.setColor(Color.RED);
         mPaint.setStrokeWidth(5);
         mPaint.setStyle(Paint.Style.STROKE);
+    }
+
+    @Override public boolean handleMessage(Message msg) {
+        if (closed) {
+            Log.d(TAG, "handleMessage: " + Thread.currentThread());
+            return false;
+        }
+        byte[] data = (byte[]) msg.obj;
+        Log.d(TAG, "onPreviewFrame: " + data.length);
+        Size size = mCamera.getParameters().getPreviewSize();
+        //这里一定要得到系统兼容的大小，否则解析出来的是一片绿色或者其他
+        YuvImage yuvImage = new YuvImage(data, ImageFormat.NV21, size.width, size.height, null);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        yuvImage.compressToJpeg(new Rect(0, 0, size.width, size.height), 70, outputStream);
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inPreferredConfig = Bitmap.Config.RGB_565;//必须设置为565，否则无法检测
+        byte[] bytes = outputStream.toByteArray();
+        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+        Matrix matrix = new Matrix();
+        matrix.postRotate(determineDisplayOrientation());
+        Bitmap bm = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix,
+                true);
+        Canvas canvas = mSurface.lockCanvas(null);
+        canvas.drawBitmap(bm, 0, 0, new Paint());
+        mSurface.unlockCanvasAndPost(canvas);
+        mCamera.addCallbackBuffer(gBuffer);
+        return true;
     }
 
     private static class CompareSizesByArea implements Comparator<Size> {
