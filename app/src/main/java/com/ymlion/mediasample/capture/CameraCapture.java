@@ -103,7 +103,8 @@ import java.util.List;
                 mCamera.setDisplayOrientation(orientation);
             }
             mCamera.setPreviewDisplay(mSurface);
-            /*mCamera.setPreviewTexture(new SurfaceTexture(10));
+            /*SurfaceTexture texture = new SurfaceTexture(10);
+            mCamera.setPreviewTexture(texture);
             mCamera.setPreviewCallback(new Camera.PreviewCallback() {
                 @Override public void onPreviewFrame(byte[] data, Camera camera) {
                     Log.d(TAG, "onPreviewFrame: " + data.length);
