@@ -60,8 +60,11 @@ import java.util.List;
     private SurfaceTexture texture;
     private Handler mHandler;
     private byte[] gBuffer;
+    private int[] textureBuffer;
+    private Bitmap textureBmp;
     private int mDisplayWidth;
     private int mDisplayHeight;
+    private int mOrientation;
 
     public CameraCapture(Context context) {
         mContext = new WeakReference<Context>(context);
@@ -119,19 +122,23 @@ import java.util.List;
             setupFocusMode(parameters);
             //parameters.setPreviewFormat(ImageFormat.NV21);
             mCamera.setParameters(parameters);
-            int orientation = determineDisplayOrientation();
-            Log.i(TAG, "orientation: " + orientation);
-            if (orientation > 0) {
-                mCamera.setDisplayOrientation(orientation);
+            mOrientation = determineDisplayOrientation();
+            Log.i(TAG, "orientation: " + mOrientation);
+            if (mOrientation > 0) {
+                mCamera.setDisplayOrientation(mOrientation);
             }
-            if (orientation == 90) {
+            if (mOrientation == 90 || mOrientation == 270) {
                 int tmp = mDisplayHeight;
                 mDisplayHeight = mDisplayWidth;
                 mDisplayWidth = tmp;
+                Log.w(TAG, "width and height exchanged!!!");
             }
             //mCamera.setPreviewDisplay(mSurface);
             mCamera.setPreviewTexture(texture);
             int bufferSize = mPreviewSize.width * mPreviewSize.height;
+            /*textureBuffer = new int[bufferSize];
+            textureBmp = Bitmap.createBitmap(mPreviewSize.width, mPreviewSize.height,
+                    Bitmap.Config.ARGB_8888);*/
             bufferSize =
                     2 * bufferSize * ImageFormat.getBitsPerPixel(parameters.getPreviewFormat()) / 8;
             gBuffer = new byte[bufferSize];
@@ -141,16 +148,115 @@ import java.util.List;
                     Message message = new Message();
                     message.obj = data;
                     mHandler.sendMessage(message);
+                    if (closed) {
+                        return;
+                    }
+                    mCamera.addCallbackBuffer(gBuffer);
                 }
             });
             mCamera.startPreview();
-            if (mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
+            closed = false;
+            // TODO: 2017/9/15 face detect
+            /*if (mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
                 mCamera.setFaceDetectionListener(this);
                 mCamera.startFaceDetection();
-            }
+            }*/
         } catch (Exception e) {
             Log.e(TAG, "failed to open camera: " + mCameraFacing);
+            closed = true;
         }
+    }
+
+    @Override public boolean handleMessage(Message msg) {
+        if (closed) {
+            return false;
+        }
+        long s = System.currentTimeMillis();
+        byte[] data = (byte[]) msg.obj;
+        /*int l = textureBuffer.length;
+        for (int i = 0; i < l; i++) {
+            int Y = data[i];
+            int i1 = i / 4 * 2 + l;
+            int U = data[i1];
+            int V = data[i1 + 1];
+            int R = (int) (Y + 1.402 * (V - 128));
+
+            int G = (int) (Y - 0.34414 * (U - 128) - 0.71414 * (V - 128));
+
+            int B = (int) (Y + 1.772 * (U - 128));
+            R = R < 0 ? 0 : R > 255 ? 255 : R;
+            G = G < 0 ? 0 : G > 255 ? 255 : G;
+            B = B < 0 ? 0 : B > 255 ? 255 : B;
+            textureBuffer[i] = 0xff000000 | (R << 16 + G << 8 + B);
+            int R = data[i] << 16;
+            int G = data[i] << 8;
+            int B = data[i];
+            textureBuffer[i] = 0xff000000 | (R + G + B);
+        }
+        long s1 = System.currentTimeMillis() - s;
+        textureBmp.setPixels(yuv2rgb(data, mPreviewSize.width, mPreviewSize.height), 0, mPreviewSize.width, 0, 0, mPreviewSize.width,
+                mPreviewSize.height);
+        Bitmap bm = textureBmp;*/
+        Size size = mCamera.getParameters().getPreviewSize();
+        //这里一定要得到系统兼容的大小，否则解析出来的是一片绿色或者其他
+        YuvImage yuvImage = new YuvImage(data, ImageFormat.NV21, size.width, size.height, null);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        yuvImage.compressToJpeg(new Rect(0, 0, size.width, size.height), 80, outputStream);
+        long s1 = System.currentTimeMillis() - s;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inPreferredConfig = Bitmap.Config.RGB_565;//必须设置为565，否则无法检测
+        byte[] bytes = outputStream.toByteArray();
+        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, null);
+        long s2 = System.currentTimeMillis() - s;
+        Matrix matrix = new Matrix();
+        if (mCameraFacing == getCameraFacing(FRONT) && mOrientation == 90) {
+            matrix.setScale(-1, 1);
+            //matrix.postRotate(270);
+        }
+        matrix.postRotate(mOrientation);
+
+        float sx = mDisplayWidth / 1.0f / bitmap.getWidth();
+        float sy = mDisplayHeight / 1.0f / bitmap.getHeight();
+        if (mOrientation == 90 || mOrientation == 270) {
+            matrix.postScale(sy, sx);
+        } else {
+            matrix.postScale(sx, sy);
+        }
+        Bitmap bm = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix,
+                true);
+        long s3 = System.currentTimeMillis() - s;
+        Canvas canvas = mSurface.lockCanvas(null);
+        canvas.drawBitmap(bm, 0, 0, null);
+        mSurface.unlockCanvasAndPost(canvas);
+        Log.d(TAG, "handleMessage: "
+                + s1
+                + " ; "
+                + s2
+                + " ; "
+                + s3
+                + " ; "
+                + (System.currentTimeMillis() - s));
+        return true;
+    }
+
+    public int[] yuv2rgb(byte[] data, int width, int height) {
+        int frameSize = width * height;
+        int[] rgba = textureBuffer;
+        for (int i = 0; i < height; i++)
+            for (int j = 0; j < width; j++) {
+                int y = (0xff & ((int) data[i * width + j]));
+                int u = (0xff & ((int) data[frameSize + (i >> 1) * width + (j & ~1) + 0]));
+                int v = (0xff & ((int) data[frameSize + (i >> 1) * width + (j & ~1) + 1]));
+                y = y < 16 ? 16 : y;
+                int r = Math.round(1.164f * (y - 16) + 1.596f * (v - 128));
+                int g = Math.round(1.164f * (y - 16) - 0.813f * (v - 128) - 0.391f * (u - 128));
+                int b = Math.round(1.164f * (y - 16) + 2.018f * (u - 128));
+                r = r < 0 ? 0 : (r > 255 ? 255 : r);
+                g = g < 0 ? 0 : (g > 255 ? 255 : g);
+                b = b < 0 ? 0 : (b > 255 ? 255 : b);
+                rgba[i * width + j] = 0xff000000 + (b << 16) + (g << 8) + r;
+            }
+        return rgba;
     }
 
     private boolean closed = false;
@@ -158,12 +264,14 @@ import java.util.List;
     public void close() {
         closed = true;
         if (null != mCamera) {
-            if (mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
+            /*if (mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
                 mCamera.stopFaceDetection();
-            }
+            }*/
             mCamera.stopPreview();
             mCamera.release();
             mCamera = null;
+            texture.release();
+            texture = null;
         }
     }
 
@@ -312,8 +420,8 @@ import java.util.List;
         Matrix matrix = new Matrix();
 
         //        这里使用的是后置摄像头就不用翻转。由于没有进行旋转角度的兼容，这里直接传系统调整的值
-        prepareMatrix(matrix, mCameraFacing == getCameraFacing(FRONT),
-                determineDisplayOrientation(), mDisplayWidth, mDisplayHeight);
+        prepareMatrix(matrix, mCameraFacing == getCameraFacing(FRONT), mOrientation, mDisplayWidth,
+                mDisplayHeight);
 
         //        canvas.save();
         //        由于有的时候手机会存在一定的偏移（歪着拿手机）所以在这里需要旋转Canvas 和 matrix，
@@ -358,37 +466,6 @@ import java.util.List;
         mPaint.setColor(Color.RED);
         mPaint.setStrokeWidth(5);
         mPaint.setStyle(Paint.Style.STROKE);
-    }
-
-    @Override public boolean handleMessage(Message msg) {
-        if (closed) {
-            Log.d(TAG, "handleMessage: " + Thread.currentThread());
-            return false;
-        }
-        byte[] data = (byte[]) msg.obj;
-        //Log.d(TAG, "onPreviewFrame: " + data.length);
-        Size size = mCamera.getParameters().getPreviewSize();
-        //这里一定要得到系统兼容的大小，否则解析出来的是一片绿色或者其他
-        YuvImage yuvImage = new YuvImage(data, ImageFormat.NV21, size.width, size.height, null);
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        yuvImage.compressToJpeg(new Rect(0, 0, size.width, size.height), 70, outputStream);
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inPreferredConfig = Bitmap.Config.RGB_565;//必须设置为565，否则无法检测
-        byte[] bytes = outputStream.toByteArray();
-        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
-        Matrix matrix = new Matrix();
-        matrix.postRotate(determineDisplayOrientation());
-        float sx = mDisplayWidth / 1.0f / bitmap.getWidth();
-        float sy = mDisplayHeight / 1.0f / bitmap.getHeight();
-        Log.d(TAG, "handleMessage: " + mDisplayWidth + "--" + mDisplayHeight + "; " + bitmap.getWidth() + "--" + bitmap.getHeight());
-        matrix.postScale(sx, sy);
-        Bitmap bm = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix,
-                true);
-        Canvas canvas = mSurface.lockCanvas(null);
-        canvas.drawBitmap(bm, 0, 0, new Paint());
-        mSurface.unlockCanvasAndPost(canvas);
-        mCamera.addCallbackBuffer(gBuffer);
-        return true;
     }
 
     private static class CompareSizesByArea implements Comparator<Size> {
