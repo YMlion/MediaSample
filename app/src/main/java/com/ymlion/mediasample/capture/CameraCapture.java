@@ -26,8 +26,10 @@ import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.WindowManager;
+import com.ymlion.mediasample.util.YuvUtil;
 import java.io.ByteArrayOutputStream;
 import java.lang.ref.WeakReference;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -127,18 +129,17 @@ import java.util.List;
             if (mOrientation > 0) {
                 mCamera.setDisplayOrientation(mOrientation);
             }
-            if (mOrientation == 90 || mOrientation == 270) {
+            /*if (mOrientation == 90 || mOrientation == 270) {
                 int tmp = mDisplayHeight;
                 mDisplayHeight = mDisplayWidth;
                 mDisplayWidth = tmp;
                 Log.w(TAG, "width and height exchanged!!!");
-            }
+            }*/
             //mCamera.setPreviewDisplay(mSurface);
             mCamera.setPreviewTexture(texture);
             int bufferSize = mPreviewSize.width * mPreviewSize.height;
-            /*textureBuffer = new int[bufferSize];
-            textureBmp = Bitmap.createBitmap(mPreviewSize.width, mPreviewSize.height,
-                    Bitmap.Config.ARGB_8888);*/
+            textureBmp =
+                    Bitmap.createBitmap(mDisplayWidth, mDisplayHeight, Bitmap.Config.ARGB_8888);
             bufferSize =
                     2 * bufferSize * ImageFormat.getBitsPerPixel(parameters.getPreviewFormat()) / 8;
             gBuffer = new byte[bufferSize];
@@ -171,32 +172,12 @@ import java.util.List;
         if (closed) {
             return false;
         }
-        long s = System.currentTimeMillis();
         byte[] data = (byte[]) msg.obj;
-        /*int l = textureBuffer.length;
-        for (int i = 0; i < l; i++) {
-            int Y = data[i];
-            int i1 = i / 4 * 2 + l;
-            int U = data[i1];
-            int V = data[i1 + 1];
-            int R = (int) (Y + 1.402 * (V - 128));
+        return drawByArgb(data);
+    }
 
-            int G = (int) (Y - 0.34414 * (U - 128) - 0.71414 * (V - 128));
-
-            int B = (int) (Y + 1.772 * (U - 128));
-            R = R < 0 ? 0 : R > 255 ? 255 : R;
-            G = G < 0 ? 0 : G > 255 ? 255 : G;
-            B = B < 0 ? 0 : B > 255 ? 255 : B;
-            textureBuffer[i] = 0xff000000 | (R << 16 + G << 8 + B);
-            int R = data[i] << 16;
-            int G = data[i] << 8;
-            int B = data[i];
-            textureBuffer[i] = 0xff000000 | (R + G + B);
-        }
-        long s1 = System.currentTimeMillis() - s;
-        textureBmp.setPixels(yuv2rgb(data, mPreviewSize.width, mPreviewSize.height), 0, mPreviewSize.width, 0, 0, mPreviewSize.width,
-                mPreviewSize.height);
-        Bitmap bm = textureBmp;*/
+    private boolean drawByBitmap(byte[] data) {
+        long s = System.currentTimeMillis();
         Size size = mCamera.getParameters().getPreviewSize();
         //这里一定要得到系统兼容的大小，否则解析出来的是一片绿色或者其他
         YuvImage yuvImage = new YuvImage(data, ImageFormat.NV21, size.width, size.height, null);
@@ -227,6 +208,78 @@ import java.util.List;
         long s3 = System.currentTimeMillis() - s;
         Canvas canvas = mSurface.lockCanvas(null);
         canvas.drawBitmap(bm, 0, 0, null);
+        mSurface.unlockCanvasAndPost(canvas);
+        Log.d(TAG, "handleMessage: "
+                + s1
+                + " ; "
+                + s2
+                + " ; "
+                + s3
+                + " ; "
+                + (System.currentTimeMillis() - s));
+        return true;
+    }
+
+    private boolean drawByArgb(byte[] data) {
+        long s = System.currentTimeMillis();
+        Size size = mCamera.getParameters().getPreviewSize();
+        byte[] rgbaData = new byte[size.width * size.height * 4];
+        YuvUtil.convertToRgba(data, size.width, size.height, rgbaData);
+        long s1 = System.currentTimeMillis() - s;
+        int displaySize = mDisplayWidth * mDisplayHeight;
+        byte[] dst = new byte[displaySize * 4];
+        YuvUtil.scaleARGB(rgbaData, size.width, size.height, dst, mDisplayWidth, mDisplayHeight, 1);
+        long s2 = System.currentTimeMillis() - s;
+        byte[] rotateBytes = dst;
+        /*if (mOrientation > 0) {
+            rotateBytes = new byte[displaySize * 4];
+            YuvUtil.rotateARGB(dst, rotateBytes, mDisplayWidth, mDisplayHeight, mOrientation);
+        }*/
+        long s3 = System.currentTimeMillis() - s;
+        ByteBuffer buffer = ByteBuffer.allocate(displaySize * 4);
+        buffer.put(rotateBytes);
+        buffer.rewind();
+        textureBmp.copyPixelsFromBuffer(buffer);
+        long s4 = System.currentTimeMillis() - s;
+        Canvas canvas = mSurface.lockCanvas(null);
+        canvas.drawBitmap(textureBmp, 0, 0, null);
+        mSurface.unlockCanvasAndPost(canvas);
+        Log.d(TAG, "handleMessage: "
+                + mOrientation
+                + "; "
+                + textureBmp.getWidth()
+                + "x"
+                + textureBmp.getHeight()
+                + "; "
+                + s1
+                + " ; "
+                + s2
+                + " ; "
+                + s3
+                + " ; "
+                + s4
+                + " ; "
+                + (System.currentTimeMillis() - s));
+        return true;
+    }
+
+    private boolean drawByYuv(byte[] data) {
+        long s = System.currentTimeMillis();
+        Size size = mCamera.getParameters().getPreviewSize();
+        int displaySize = mDisplayWidth * mDisplayHeight;
+        byte[] dst = new byte[displaySize * 3 / 2];
+        YuvUtil.scaleNV21(data, size.width, size.height, dst, mDisplayWidth, mDisplayHeight, 1);
+        long s1 = System.currentTimeMillis() - s;
+        byte[] rgbaData = new byte[displaySize * 4];
+        YuvUtil.convertToRgba(dst, mDisplayWidth, mDisplayHeight, rgbaData);
+        long s2 = System.currentTimeMillis() - s;
+        ByteBuffer buffer = ByteBuffer.allocate(displaySize * 4);
+        buffer.put(dst);
+        buffer.rewind();
+        textureBmp.copyPixelsFromBuffer(buffer);
+        long s3 = System.currentTimeMillis() - s;
+        Canvas canvas = mSurface.lockCanvas(null);
+        canvas.drawBitmap(textureBmp, 0, 0, null);
         mSurface.unlockCanvasAndPost(canvas);
         Log.d(TAG, "handleMessage: "
                 + s1
