@@ -14,10 +14,14 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,TAG ,__VA_ARGS__) // 定义LOGE类型
 #define LOGF(...) __android_log_print(ANDROID_LOG_FATAL,TAG ,__VA_ARGS__) // 定义LOGF类型
 
+#define FOURCC(a, b, c, d)                                 \
+  (((uint32_t)(a)) | ((uint32_t)(b) << 8) |       /* NOLINT */ \
+   ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24)) /* NOLINT */
+
 JNIEXPORT void JNICALL
 Java_com_ymlion_mediasample_util_YuvUtil_convertToRgba(JNIEnv *env, jclass type,
                                                        jbyteArray yuvBytes_, jint width,
-                                                       jint height, jbyteArray rgba_) {
+                                                       jint height, jbyteArray rgba_, jint mode) {
 
     LOGD("convert to argb");
     uint8_t *yuvData = (uint8_t *) (*env)->GetByteArrayElements(env, yuvBytes_, NULL);
@@ -32,9 +36,6 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToRgba(JNIEnv *env, jclass type,
 //    I420ToRGBA((const uint8_t *) yuvData, y_stride, yuvData + ySize, u_stride,
 //               yuvData + ySize + uSize, v_stride, rgbData, rgba_stride, width, height);
 
-    NV12ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
-               rgbData, rgba_stride, width, height);
-
 //    int NV12ToARGB(const uint8* src_y,
 //                   int src_stride_y,
 //                   const uint8* src_uv,
@@ -43,6 +44,27 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToRgba(JNIEnv *env, jclass type,
 //                   int dst_stride_argb,
 //                   int width,
 //                   int height);
+
+    switch (mode) {
+        case 1:
+            NV12ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
+                       rgbData, rgba_stride, width, height);
+            break;
+        case 2:
+            NV21ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
+                       rgbData, rgba_stride, width, height);
+            break;
+        default:
+            ConvertToARGB(yuvData, ySize * 3 / 2, rgbData, rgba_stride, 0, 0, width, height, width,
+                          height, 0, FOURCC('N', 'V', '1', '2'));
+    }
+//    int ConvertToARGB(const uint8* src_frame, size_t src_size,
+//                      uint8* dst_argb, int dst_stride_argb,
+//                      int crop_x, int crop_y,
+//                      int src_width, int src_height,
+//                      int crop_width, int crop_height,
+//                      enum RotationMode rotation,
+//                      uint32 format);
 
     (*env)->ReleaseByteArrayElements(env, yuvBytes_, (jbyte *) yuvData, 0);
     (*env)->ReleaseByteArrayElements(env, rgba_, (jbyte *) rgbData, 0);
@@ -70,7 +92,21 @@ Java_com_ymlion_mediasample_util_YuvUtil_scaleNV21(JNIEnv *env, jclass type, jby
               dst_y_stride, (uint8_t *) dstData + dst_ySize, dst_u_stride,
               (uint8_t *) dstData + dst_ySize + dst_uSize, dst_v_stride, dst_width, dst_height,
               mode);
+//    I420Scale((uint8_t *) srcData, width, (uint8_t *) srcData + ySize, u_stride,
+//              (uint8_t *) srcData + ySize + uSize, v_stride, width, height, (uint8_t *) dstData,
+//              dst_y_stride, (uint8_t *) dstData + dst_ySize, dst_u_stride,
+//              (uint8_t *) dstData + dst_ySize + dst_uSize, dst_v_stride, dst_width, dst_height,
+//              mode);
 
+//    int I420Scale(const uint8* src_y, int src_stride_y,
+//                  const uint8* src_u, int src_stride_u,
+//                  const uint8* src_v, int src_stride_v,
+//                  int src_width, int src_height,
+//                  uint8* dst_y, int dst_stride_y,
+//                  uint8* dst_u, int dst_stride_u,
+//                  uint8* dst_v, int dst_stride_v,
+//                  int dst_width, int dst_height,
+//                  enum FilterMode filtering);
 
     (*env)->ReleaseByteArrayElements(env, src, srcData, 0);
     (*env)->ReleaseByteArrayElements(env, dst, dstData, 0);
@@ -102,13 +138,13 @@ Java_com_ymlion_mediasample_util_YuvUtil_rotateARGB(JNIEnv *env, jclass type, jb
     jbyte *dst = (*env)->GetByteArrayElements(env, dst_, NULL);
 
     int src_stride = width * 4;
-    int dst_stride = width * 4;
+    int dst_stride = height * 4;
     if (mode == 180) {
-        dst_stride = height * 4;
-        src_stride = width * 4;
+        src_stride = height * 4;
+        dst_stride = width * 4;
     }
 
-    ARGBRotate((uint8_t *) src, src_stride, (uint8_t *) dst, dst_stride, width, height, mode);
+    ARGBRotate((const uint8_t *) src, src_stride, (uint8_t *) dst, dst_stride, width, height, mode);
 
     (*env)->ReleaseByteArrayElements(env, src_, src, 0);
     (*env)->ReleaseByteArrayElements(env, dst_, dst, 0);

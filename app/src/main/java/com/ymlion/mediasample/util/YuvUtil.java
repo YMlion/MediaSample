@@ -5,7 +5,8 @@ package com.ymlion.mediasample.util;
  */
 
 public class YuvUtil {
-    public static native void convertToRgba(byte[] yuvBytes, int width, int height, byte[] argb);
+    public static native void convertToRgba(byte[] yuvBytes, int width, int height, byte[] argb,
+            int mode);
 
     public static native void scaleNV21(byte[] src, int width, int height, byte[] dst, int dstWidth,
             int dstHeight, int mode);

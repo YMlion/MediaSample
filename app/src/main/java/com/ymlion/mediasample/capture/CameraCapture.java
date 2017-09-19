@@ -122,7 +122,7 @@ import java.util.List;
             }
             setupFlashMode(parameters);
             setupFocusMode(parameters);
-            //parameters.setPreviewFormat(ImageFormat.NV21);
+            parameters.setPreviewFormat(ImageFormat.NV21);
             mCamera.setParameters(parameters);
             mOrientation = determineDisplayOrientation();
             Log.i(TAG, "orientation: " + mOrientation);
@@ -222,28 +222,50 @@ import java.util.List;
 
     private boolean drawByArgb(byte[] data) {
         long s = System.currentTimeMillis();
+        long e, t;
         Size size = mCamera.getParameters().getPreviewSize();
-        byte[] rgbaData = new byte[size.width * size.height * 4];
-        YuvUtil.convertToRgba(data, size.width, size.height, rgbaData);
-        long s1 = System.currentTimeMillis() - s;
+        int previewSize = size.width * size.height;
+        byte[] rgbaData = new byte[previewSize * 4];
+        YuvUtil.convertToRgba(data, size.width, size.height, rgbaData, 1);
+        e = System.currentTimeMillis();
+        long s1 = e - s;
+        byte[] rotateBytes;
+        if (mOrientation > 0) {
+            rotateBytes = new byte[previewSize * 4];
+            YuvUtil.rotateARGB(rgbaData, rotateBytes, size.width, size.height, mOrientation);
+        } else {
+            rotateBytes = rgbaData;
+        }
+        t = System.currentTimeMillis();
+        long s2 = t - e;
+        e = t;
         int displaySize = mDisplayWidth * mDisplayHeight;
         byte[] dst = new byte[displaySize * 4];
-        YuvUtil.scaleARGB(rgbaData, size.width, size.height, dst, mDisplayWidth, mDisplayHeight, 1);
-        long s2 = System.currentTimeMillis() - s;
-        byte[] rotateBytes = dst;
-        /*if (mOrientation > 0) {
-            rotateBytes = new byte[displaySize * 4];
-            YuvUtil.rotateARGB(dst, rotateBytes, mDisplayWidth, mDisplayHeight, mOrientation);
-        }*/
-        long s3 = System.currentTimeMillis() - s;
+        int w, h;
+        if (mOrientation == 90 || mOrientation == 270) {
+            w = size.height;
+            h = size.width;
+        } else {
+            w = size.width;
+            h = size.height;
+        }
+        YuvUtil.scaleARGB(rotateBytes, w, h, dst, mDisplayWidth, mDisplayHeight, 0);
+        t = System.currentTimeMillis();
+        long s3 = t - e;
+        e = t;
         ByteBuffer buffer = ByteBuffer.allocate(displaySize * 4);
-        buffer.put(rotateBytes);
+        buffer.put(dst);
         buffer.rewind();
         textureBmp.copyPixelsFromBuffer(buffer);
-        long s4 = System.currentTimeMillis() - s;
+        t = System.currentTimeMillis();
+        long s4 = t - e;
+        e = t;
         Canvas canvas = mSurface.lockCanvas(null);
         canvas.drawBitmap(textureBmp, 0, 0, null);
         mSurface.unlockCanvasAndPost(canvas);
+        t = System.currentTimeMillis();
+        long s5 = t - e;
+        e = t - s;
         Log.d(TAG, "handleMessage: "
                 + mOrientation
                 + "; "
@@ -258,8 +280,7 @@ import java.util.List;
                 + s3
                 + " ; "
                 + s4
-                + " ; "
-                + (System.currentTimeMillis() - s));
+                + " ; " + s5 + " ; total = " + e);
         return true;
     }
 
@@ -271,10 +292,10 @@ import java.util.List;
         YuvUtil.scaleNV21(data, size.width, size.height, dst, mDisplayWidth, mDisplayHeight, 1);
         long s1 = System.currentTimeMillis() - s;
         byte[] rgbaData = new byte[displaySize * 4];
-        YuvUtil.convertToRgba(dst, mDisplayWidth, mDisplayHeight, rgbaData);
+        YuvUtil.convertToRgba(dst, mDisplayWidth, mDisplayHeight, rgbaData, 1);
         long s2 = System.currentTimeMillis() - s;
         ByteBuffer buffer = ByteBuffer.allocate(displaySize * 4);
-        buffer.put(dst);
+        buffer.put(rgbaData);
         buffer.rewind();
         textureBmp.copyPixelsFromBuffer(buffer);
         long s3 = System.currentTimeMillis() - s;
