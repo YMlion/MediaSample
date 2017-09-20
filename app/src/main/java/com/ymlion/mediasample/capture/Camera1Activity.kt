@@ -118,10 +118,11 @@ class Camera1Activity : Activity(), ICameraCallback {
     }
 
     override fun onInitFinished(previewWidth: Int, previewHeight: Int) {
-        /*val width = surfaceView.width
+        val width = surfaceView.width
         val height = width * previewWidth / previewHeight
         val params = surfaceView.layoutParams
-        params.height = height*/
+        params.height = height
+        surfaceView.layoutParams = params
     }
 
     override fun onImageAvailable(data: ByteArray?) {

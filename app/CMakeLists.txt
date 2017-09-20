@@ -44,6 +44,7 @@ find_library( jnigraphics-lib
 # build script, prebuilt third-party libraries, or system libraries.
 target_link_libraries( # Specifies the target library.
                        yuvtool
+                       -landroid
                        yuv
                        # Links the target library to the log library
                        # included in the NDK.

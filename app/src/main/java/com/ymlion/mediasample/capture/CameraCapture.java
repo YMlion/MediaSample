@@ -2,7 +2,6 @@ package com.ymlion.mediasample.capture;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ImageFormat;
@@ -12,7 +11,6 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
-import android.graphics.YuvImage;
 import android.hardware.Camera;
 import android.hardware.Camera.AutoFocusCallback;
 import android.hardware.Camera.CameraInfo;
@@ -27,9 +25,7 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.WindowManager;
 import com.ymlion.mediasample.util.YuvUtil;
-import java.io.ByteArrayOutputStream;
 import java.lang.ref.WeakReference;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -62,7 +58,6 @@ import java.util.List;
     private SurfaceTexture texture;
     private Handler mHandler;
     private byte[] gBuffer;
-    private int[] textureBuffer;
     private Bitmap textureBmp;
     private int mDisplayWidth;
     private int mDisplayHeight;
@@ -102,9 +97,6 @@ import java.util.List;
 
         try {
             mSurface = holder;
-            Rect rect = holder.getSurfaceFrame();
-            mDisplayWidth = rect.width();
-            mDisplayHeight = rect.height();
             texture = new SurfaceTexture(10);
             mCamera = Camera.open(mCameraFacing);
             Parameters parameters = mCamera.getParameters();
@@ -114,12 +106,16 @@ import java.util.List;
             Log.i(TAG, "picture size: " + mPictureSize.width + "*" + mPictureSize.height);
             mPreviewSize =
                     chooseOptimalSize(parameters.getSupportedPreviewSizes(), wantedMinPreviewWidth,
-                            mPictureSize);
+                            mPictureSize, 1);
             parameters.setPreviewSize(mPreviewSize.width, mPreviewSize.height);
             Log.i(TAG, "preview size: " + mPreviewSize.width + "*" + mPreviewSize.height);
             if (null != mCallback) {
                 mCallback.onInitFinished(mPreviewSize.width, mPreviewSize.height);
             }
+            Rect rect = holder.getSurfaceFrame();
+            mDisplayWidth = rect.width();
+            mDisplayHeight = mDisplayWidth * mPreviewSize.width / mPreviewSize.height;
+            Log.i(TAG, "display size is " + mDisplayWidth + "x" + mDisplayHeight);
             setupFlashMode(parameters);
             setupFocusMode(parameters);
             parameters.setPreviewFormat(ImageFormat.NV21);
@@ -138,8 +134,8 @@ import java.util.List;
             //mCamera.setPreviewDisplay(mSurface);
             mCamera.setPreviewTexture(texture);
             int bufferSize = mPreviewSize.width * mPreviewSize.height;
-            textureBmp =
-                    Bitmap.createBitmap(mDisplayWidth, mDisplayHeight, Bitmap.Config.ARGB_8888);
+            //textureBmp =
+            //        Bitmap.createBitmap(mDisplayWidth, mDisplayHeight, Bitmap.Config.ARGB_8888);
             bufferSize =
                     2 * bufferSize * ImageFormat.getBitsPerPixel(parameters.getPreviewFormat()) / 8;
             gBuffer = new byte[bufferSize];
@@ -173,164 +169,8 @@ import java.util.List;
             return false;
         }
         byte[] data = (byte[]) msg.obj;
-        return drawByArgb(data);
-    }
-
-    private boolean drawByBitmap(byte[] data) {
-        long s = System.currentTimeMillis();
-        Size size = mCamera.getParameters().getPreviewSize();
-        //这里一定要得到系统兼容的大小，否则解析出来的是一片绿色或者其他
-        YuvImage yuvImage = new YuvImage(data, ImageFormat.NV21, size.width, size.height, null);
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        yuvImage.compressToJpeg(new Rect(0, 0, size.width, size.height), 80, outputStream);
-        long s1 = System.currentTimeMillis() - s;
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inPreferredConfig = Bitmap.Config.RGB_565;//必须设置为565，否则无法检测
-        byte[] bytes = outputStream.toByteArray();
-        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, null);
-        long s2 = System.currentTimeMillis() - s;
-        Matrix matrix = new Matrix();
-        if (mCameraFacing == getCameraFacing(FRONT) && mOrientation == 90) {
-            matrix.setScale(-1, 1);
-            //matrix.postRotate(270);
-        }
-        matrix.postRotate(mOrientation);
-
-        float sx = mDisplayWidth / 1.0f / bitmap.getWidth();
-        float sy = mDisplayHeight / 1.0f / bitmap.getHeight();
-        if (mOrientation == 90 || mOrientation == 270) {
-            matrix.postScale(sy, sx);
-        } else {
-            matrix.postScale(sx, sy);
-        }
-        Bitmap bm = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix,
-                true);
-        long s3 = System.currentTimeMillis() - s;
-        Canvas canvas = mSurface.lockCanvas(null);
-        canvas.drawBitmap(bm, 0, 0, null);
-        mSurface.unlockCanvasAndPost(canvas);
-        Log.d(TAG, "handleMessage: "
-                + s1
-                + " ; "
-                + s2
-                + " ; "
-                + s3
-                + " ; "
-                + (System.currentTimeMillis() - s));
-        return true;
-    }
-
-    private boolean drawByArgb(byte[] data) {
-        long s = System.currentTimeMillis();
-        long e, t;
-        Size size = mCamera.getParameters().getPreviewSize();
-        int previewSize = size.width * size.height;
-        byte[] rgbaData = new byte[previewSize * 4];
-        YuvUtil.convertToRgba(data, size.width, size.height, rgbaData, 1);
-        e = System.currentTimeMillis();
-        long s1 = e - s;
-        byte[] rotateBytes;
-        if (mOrientation > 0) {
-            rotateBytes = new byte[previewSize * 4];
-            YuvUtil.rotateARGB(rgbaData, rotateBytes, size.width, size.height, mOrientation);
-        } else {
-            rotateBytes = rgbaData;
-        }
-        t = System.currentTimeMillis();
-        long s2 = t - e;
-        e = t;
-        int displaySize = mDisplayWidth * mDisplayHeight;
-        byte[] dst = new byte[displaySize * 4];
-        int w, h;
-        if (mOrientation == 90 || mOrientation == 270) {
-            w = size.height;
-            h = size.width;
-        } else {
-            w = size.width;
-            h = size.height;
-        }
-        YuvUtil.scaleARGB(rotateBytes, w, h, dst, mDisplayWidth, mDisplayHeight, 0);
-        t = System.currentTimeMillis();
-        long s3 = t - e;
-        e = t;
-        ByteBuffer buffer = ByteBuffer.allocate(displaySize * 4);
-        buffer.put(dst);
-        buffer.rewind();
-        textureBmp.copyPixelsFromBuffer(buffer);
-        t = System.currentTimeMillis();
-        long s4 = t - e;
-        e = t;
-        Canvas canvas = mSurface.lockCanvas(null);
-        canvas.drawBitmap(textureBmp, 0, 0, null);
-        mSurface.unlockCanvasAndPost(canvas);
-        t = System.currentTimeMillis();
-        long s5 = t - e;
-        e = t - s;
-        Log.d(TAG, "handleMessage: "
-                + mOrientation
-                + "; "
-                + textureBmp.getWidth()
-                + "x"
-                + textureBmp.getHeight()
-                + "; "
-                + s1
-                + " ; "
-                + s2
-                + " ; "
-                + s3
-                + " ; "
-                + s4
-                + " ; " + s5 + " ; total = " + e);
-        return true;
-    }
-
-    private boolean drawByYuv(byte[] data) {
-        long s = System.currentTimeMillis();
-        Size size = mCamera.getParameters().getPreviewSize();
-        int displaySize = mDisplayWidth * mDisplayHeight;
-        byte[] dst = new byte[displaySize * 3 / 2];
-        YuvUtil.scaleNV21(data, size.width, size.height, dst, mDisplayWidth, mDisplayHeight, 1);
-        long s1 = System.currentTimeMillis() - s;
-        byte[] rgbaData = new byte[displaySize * 4];
-        YuvUtil.convertToRgba(dst, mDisplayWidth, mDisplayHeight, rgbaData, 1);
-        long s2 = System.currentTimeMillis() - s;
-        ByteBuffer buffer = ByteBuffer.allocate(displaySize * 4);
-        buffer.put(rgbaData);
-        buffer.rewind();
-        textureBmp.copyPixelsFromBuffer(buffer);
-        long s3 = System.currentTimeMillis() - s;
-        Canvas canvas = mSurface.lockCanvas(null);
-        canvas.drawBitmap(textureBmp, 0, 0, null);
-        mSurface.unlockCanvasAndPost(canvas);
-        Log.d(TAG, "handleMessage: "
-                + s1
-                + " ; "
-                + s2
-                + " ; "
-                + s3
-                + " ; "
-                + (System.currentTimeMillis() - s));
-        return true;
-    }
-
-    public int[] yuv2rgb(byte[] data, int width, int height) {
-        int frameSize = width * height;
-        int[] rgba = textureBuffer;
-        for (int i = 0; i < height; i++)
-            for (int j = 0; j < width; j++) {
-                int y = (0xff & ((int) data[i * width + j]));
-                int u = (0xff & ((int) data[frameSize + (i >> 1) * width + (j & ~1) + 0]));
-                int v = (0xff & ((int) data[frameSize + (i >> 1) * width + (j & ~1) + 1]));
-                y = y < 16 ? 16 : y;
-                int r = Math.round(1.164f * (y - 16) + 1.596f * (v - 128));
-                int g = Math.round(1.164f * (y - 16) - 0.813f * (v - 128) - 0.391f * (u - 128));
-                int b = Math.round(1.164f * (y - 16) + 2.018f * (u - 128));
-                r = r < 0 ? 0 : (r > 255 ? 255 : r);
-                g = g < 0 ? 0 : (g > 255 ? 255 : g);
-                b = b < 0 ? 0 : (b > 255 ? 255 : b);
-                rgba[i * width + j] = 0xff000000 + (b << 16) + (g << 8) + r;
-            }
-        return rgba;
+        return YuvUtil.drawByArgb(mCamera, mOrientation, mDisplayWidth, mDisplayHeight,
+                mSurface.getSurface(), data);
     }
 
     private boolean closed = false;
@@ -379,19 +219,37 @@ import java.util.List;
                 : CameraInfo.CAMERA_FACING_BACK;
     }
 
-    private Size chooseOptimalSize(List<Size> choices, int wantedMinWidth, Size aspectRatio) {
+    /**
+     * @param scaleMode 4:3 or 16:9
+     */
+    private Size chooseOptimalSize(List<Size> choices, int wantedMinWidth, Size aspectRatio,
+            int scaleMode) {
         List<Size> results = new ArrayList<Size>();
         for (Size choice : choices) {
             if (choice.width * aspectRatio.height == choice.height * aspectRatio.width
                     && choice.height >= wantedMinWidth) {
                 results.add(choice);
             }
+            Log.d(TAG, "support preview size : " + choice.width + " x " + choice.height);
         }
 
         if (results.size() > 0) {
             return Collections.min(results, new CompareSizesByArea());
         } else {
             Log.e(TAG, "failed to any suitable preview size");
+            if (scaleMode == 1) {
+                for (Size choice : choices) {
+                    if (choice.width * 3 == choice.height * 4) {
+                        return choice;
+                    }
+                }
+            } else if (scaleMode == 2) {
+                for (Size choice : choices) {
+                    if (choice.width * 9 == choice.height * 16) {
+                        return choice;
+                    }
+                }
+            }
             return choices.get(0);
         }
     }
