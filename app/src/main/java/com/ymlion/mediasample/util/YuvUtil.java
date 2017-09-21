@@ -34,7 +34,8 @@ public class YuvUtil {
     public static native void rotateARGB(byte[] src, byte[] dst, int width, int height, int mode);
 
     public static native void convertToARGB(byte[] yuvData, int width, int height, int dstWidth,
-            int dstHeight, int orientation, int format, int scaleMode, Surface surface);
+            int dstHeight, int orientation, int format, int scaleMode, Surface surface,
+            boolean front);
 
     public static native void fillBitmap(Bitmap dst, byte[] src, int size);
 
@@ -84,11 +85,11 @@ public class YuvUtil {
     }
 
     public static boolean drawByArgb(Camera camera, int orientation, int displayWidth,
-            int displayHeight, Surface surface, byte[] data) {
+            int displayHeight, Surface surface, byte[] data, boolean front) {
         long s = System.currentTimeMillis();
         Camera.Size size = camera.getParameters().getPreviewSize();
         YuvUtil.convertToARGB(data, size.width, size.height, displayWidth, displayHeight,
-                orientation, 1, 0, surface);
+                orientation, 1, 0, surface, front);
         // 两者速度几乎无差别，但第二个内存无抖动
         //textureBmp.copyPixelsFromBuffer(ByteBuffer.wrap(dst));
         //YuvUtil.fillBitmap(textureBmp, dst, displaySize);

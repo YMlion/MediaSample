@@ -174,7 +174,7 @@ import java.util.List;
         }
         byte[] data = (byte[]) msg.obj;
         return YuvUtil.drawByArgb(mCamera, mOrientation, mDisplayWidth, mDisplayHeight,
-                mSurface.getSurface(), data);
+                mSurface.getSurface(), data, mCameraFacing == getCameraFacing(FRONT));
     }
 
     private boolean closed = false;

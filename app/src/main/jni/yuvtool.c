@@ -33,7 +33,7 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToRgba(JNIEnv *env, jclass type,
 
     switch (mode) {
         case 1:
-        NV12ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
+            NV12ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
                        rgbData, rgba_stride, width, height);
             break;
         case 2:
@@ -120,7 +120,8 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
                                                        jbyteArray yuvData_, jint width, jint height,
                                                        jint dstWidth, jint dstHeight,
                                                        jint orientation, jint format,
-                                                       jint scaleMode, jobject surface) {
+                                                       jint scaleMode, jobject surface,
+                                                       jboolean front) {
     uint8_t *yuvData = (uint8_t *) (*env)->GetByteArrayElements(env, yuvData_, NULL);
 
     int rgba_stride = width * 4;
@@ -139,7 +140,8 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
                        (uint8 *) rgbData, rgba_stride, width, height);
             break;
         default:
-            ConvertToARGB(yuvData, ySize * 3 / 2, (uint8 *) rgbData, rgba_stride, 0, 0, width, height, width,
+            ConvertToARGB(yuvData, ySize * 3 / 2, (uint8 *) rgbData, rgba_stride, 0, 0, width,
+                          height, width,
                           height, (enum RotationMode) 0, FOURCC('N', 'V', '1', '2'));
     }
 
@@ -187,8 +189,16 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
     if (ANativeWindow_lock(nativeWindow, &windowBuffer, NULL) < 0) {
         LOGD("cannot lock window");
     } else {
-        uint8_t *dst = (uint8 *) windowBuffer.bits;
-        ARGBScale((uint8 *) rotateData, src_stride, w, h, dst, windowBuffer.stride * 4, dstWidth,
+        uint8_t *dst;
+        int stride = windowBuffer.stride * 4;
+        if (front) {
+            dst = (uint8 *) windowBuffer.bits + (stride * dstHeight);
+            stride = -stride;
+        } else {
+            dst = (uint8 *) windowBuffer.bits;
+        }
+
+        ARGBScale((uint8 *) rotateData, src_stride, w, h, dst, stride, dstWidth,
                   dstHeight, (enum FilterMode) scaleMode);
         ANativeWindow_unlockAndPost(nativeWindow);
     }
