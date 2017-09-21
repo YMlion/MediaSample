@@ -16,7 +16,46 @@ include_directories(src/main/jni/include/)
 
 # 查找当前目录下的所有源文件
 # 并将名称保存到 DIR_SRCS 变量
-aux_source_directory(src/main/jni/source/ DIR_SRCS)
+aux_source_directory(src/main/jni/source DIR_SRCS)
+
+if(${ANDROID_ABI} STREQUAL "arm64-v8a")
+#   message("******* arm64-v8a *********")
+   list(REMOVE_ITEM DIR_SRCS
+       src/main/jni/source/compare_neon.cc
+       src/main/jni/source/rotate_neon.cc
+       src/main/jni/source/row_neon.cc
+       src/main/jni/source/scale_neon.cc
+       src/main/jni/source/compare_gcc.cc
+       src/main/jni/source/rotate_gcc.cc
+       src/main/jni/source/row_gcc.cc
+       src/main/jni/source/scale_gcc.cc )
+elseif(${ANDROID_ABI} STREQUAL "armeabi-v7a")
+       list(REMOVE_ITEM DIR_SRCS
+           src/main/jni/source/compare_neon64.cc
+           src/main/jni/source/rotate_neon64.cc
+           src/main/jni/source/row_neon64.cc
+           src/main/jni/source/scale_neon64.cc
+           src/main/jni/source/compare_gcc.cc
+           src/main/jni/source/rotate_gcc.cc
+           src/main/jni/source/row_gcc.cc
+           src/main/jni/source/scale_gcc.cc )
+#       message("******* armeabi-v7a *********")
+else()
+       list(REMOVE_ITEM DIR_SRCS
+           src/main/jni/source/compare_neon64.cc
+           src/main/jni/source/rotate_neon64.cc
+           src/main/jni/source/row_neon64.cc
+           src/main/jni/source/scale_neon64.cc
+           src/main/jni/source/compare_neon.cc
+           src/main/jni/source/rotate_neon.cc
+           src/main/jni/source/row_neon.cc
+           src/main/jni/source/scale_neon.cc )
+#       message("******* others *********")
+endif()
+
+# foreach(f ${DIR_SRCS})
+#  message(${f})
+# endforeach()
 
 add_library( yuvtool
              SHARED
