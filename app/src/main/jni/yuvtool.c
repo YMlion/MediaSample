@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
+#include "include/libyuv.h"
 
 #define TAG "jni-log-jni" // 这个是自定义的LOG的标识
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG,TAG ,__VA_ARGS__) // 定义LOGD类型
@@ -36,7 +37,7 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToRgba(JNIEnv *env, jclass type,
 
     switch (mode) {
         case 1:
-            NV12ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
+        NV12ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
                        rgbData, rgba_stride, width, height);
             break;
         case 2:

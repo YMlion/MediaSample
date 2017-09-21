@@ -104,9 +104,13 @@ import java.util.List;
                     new CompareSizesByArea());
             parameters.setPictureSize(mPictureSize.width, mPictureSize.height);
             Log.i(TAG, "picture size: " + mPictureSize.width + "*" + mPictureSize.height);
+            int scaleMode = 1;// 4:3
+            if (mPictureSize.width * 9 == mPictureSize.height * 16) {
+                scaleMode = 2;// 16:9
+            }
             mPreviewSize =
                     chooseOptimalSize(parameters.getSupportedPreviewSizes(), wantedMinPreviewWidth,
-                            mPictureSize, 1);
+                            mPictureSize, scaleMode);
             parameters.setPreviewSize(mPreviewSize.width, mPreviewSize.height);
             Log.i(TAG, "preview size: " + mPreviewSize.width + "*" + mPreviewSize.height);
             if (null != mCallback) {

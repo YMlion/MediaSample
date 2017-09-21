@@ -148,7 +148,7 @@ class Camera1Activity : Activity(), ICameraCallback {
     companion object {
         init {
             System.loadLibrary("yuvtool")
-            System.loadLibrary("yuv")
+//            System.loadLibrary("yuv")
         }
     }
 
