@@ -77,45 +77,6 @@ Java_com_ymlion_mediasample_util_YuvUtil_scaleNV21(JNIEnv *env, jclass type, jby
 }
 
 JNIEXPORT void JNICALL
-Java_com_ymlion_mediasample_util_YuvUtil_scaleARGB(JNIEnv *env, jclass type, jbyteArray src_,
-                                                   jint width, jint height, jbyteArray dst_,
-                                                   jint dstWidth, jint dstHeight, jint mode) {
-    jbyte *src = (*env)->GetByteArrayElements(env, src_, NULL);
-    jbyte *dst = (*env)->GetByteArrayElements(env, dst_, NULL);
-
-    int src_stride = 4 * width;
-    int dst_stride = 4 * dstWidth;
-    // TODO
-
-    ARGBScale((uint8 *) src, src_stride, width, height, (uint8 *) dst, dst_stride, dstWidth,
-              dstHeight, (enum FilterMode) mode);
-
-    (*env)->ReleaseByteArrayElements(env, src_, src, 0);
-    (*env)->ReleaseByteArrayElements(env, dst_, dst, 0);
-}
-
-JNIEXPORT void JNICALL
-Java_com_ymlion_mediasample_util_YuvUtil_rotateARGB(JNIEnv *env, jclass type, jbyteArray src_,
-                                                    jbyteArray dst_, jint width, jint height,
-                                                    jint mode) {
-    jbyte *src = (*env)->GetByteArrayElements(env, src_, NULL);
-    jbyte *dst = (*env)->GetByteArrayElements(env, dst_, NULL);
-
-    int src_stride = width * 4;
-    int dst_stride = height * 4;
-    if (mode == 180) {
-        src_stride = height * 4;
-        dst_stride = width * 4;
-    }
-
-    ARGBRotate((const uint8 *) src, src_stride, (uint8 *) dst, dst_stride, width, height,
-               (enum RotationMode) mode);
-
-    (*env)->ReleaseByteArrayElements(env, src_, src, 0);
-    (*env)->ReleaseByteArrayElements(env, dst_, dst, 0);
-}
-
-JNIEXPORT void JNICALL
 Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
                                                        jbyteArray yuvData_, jint width, jint height,
                                                        jint dstWidth, jint dstHeight,
@@ -126,10 +87,10 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
 
     int rgba_stride = width * 4;
     int y_stride = width;
-    int uv_stride = (width + 1) / 2 * 2;
     size_t ySize = (size_t) (y_stride * height);
     char *rgbData = malloc(sizeof(char) * width * height * 4);
 
+    // yuv convert to argb，只能是NV12，不清楚原因
     switch (format) {
         case 1:
             NV12ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
@@ -147,6 +108,7 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
 
     char *rotateData;
 
+    // rotate argb
     if (orientation > 0) {
         rotateData = malloc(sizeof(char) * width * height * 4);
         int src_stride = width * 4;
@@ -162,6 +124,7 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
         rotateData = rgbData;
     }
 
+    // scale and render, 直接将scale之后的渲染到surface上
     int w = width;
     int h = height;
     if (orientation == 90 || orientation == 270) {
@@ -169,7 +132,6 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
         w = height;
     }
     int src_stride = 4 * w;
-    int dst_stride = 4 * dstWidth;
 
     ANativeWindow *nativeWindow;
     ANativeWindow_Buffer windowBuffer;
@@ -191,7 +153,7 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
     } else {
         uint8_t *dst;
         int stride = windowBuffer.stride * 4;
-        if (front) {
+        if (front) {// 前置需要翻转镜像
             dst = (uint8 *) windowBuffer.bits + (stride * dstHeight);
             stride = -stride;
         } else {
@@ -203,21 +165,8 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
         ANativeWindow_unlockAndPost(nativeWindow);
     }
 
+    // release
     (*env)->ReleaseByteArrayElements(env, yuvData_, (jbyte *) yuvData, 0);
     free(rgbData);
     free(rotateData);
-}
-
-JNIEXPORT void JNICALL
-Java_com_ymlion_mediasample_util_YuvUtil_fillBitmap(JNIEnv *env, jclass type, jobject dst,
-                                                    jbyteArray src_, jint size) {
-    jbyte *src = (*env)->GetByteArrayElements(env, src_, NULL);
-
-    u_char *bitmap = NULL;
-    AndroidBitmap_lockPixels(env, dst, (
-            void **) &bitmap);
-    memcpy(bitmap, src, (size_t) size);
-    AndroidBitmap_unlockPixels(env, dst);
-
-    (*env)->ReleaseByteArrayElements(env, src_, src, 0);
 }

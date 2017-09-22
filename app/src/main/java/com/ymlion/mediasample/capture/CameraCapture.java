@@ -1,7 +1,6 @@
 package com.ymlion.mediasample.capture;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ImageFormat;
@@ -31,8 +30,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-@SuppressWarnings("deprecation") public class CameraCapture implements Camera.FaceDetectionListener, Handler.Callback,
-        Camera.PreviewCallback {
+@SuppressWarnings("deprecation") public class CameraCapture
+        implements Camera.FaceDetectionListener, Handler.Callback, Camera.PreviewCallback {
     private static final String TAG = CameraCapture.class.getSimpleName();
     public static final int FLASH_MODE_OFF = 0;
     public static final int FLASH_MODE_ON = 1;
@@ -68,7 +67,7 @@ import java.util.List;
     private int faceState = 2;
 
     public CameraCapture(Context context) {
-        mContext = new WeakReference<Context>(context);
+        mContext = new WeakReference<>(context);
         HandlerThread thread = new HandlerThread("surface");
         thread.start();
         mHandler = new Handler(thread.getLooper(), this);
@@ -216,7 +215,7 @@ import java.util.List;
      */
     private Size chooseOptimalSize(List<Size> choices, int wantedMinWidth, Size aspectRatio,
             int scaleMode) {
-        List<Size> results = new ArrayList<Size>();
+        List<Size> results = new ArrayList<>();
         for (Size choice : choices) {
             if (choice.width * aspectRatio.height == choice.height * aspectRatio.width
                     && choice.height >= wantedMinWidth) {
@@ -373,7 +372,7 @@ import java.util.List;
      * @param displayOrientation 旋转的角度
      * @param viewWidth 预览View的宽高
      */
-    public void prepareMatrix(Matrix matrix, boolean mirror, int displayOrientation, int viewWidth,
+    private void prepareMatrix(Matrix matrix, boolean mirror, int displayOrientation, int viewWidth,
             int viewHeight) {
         // Need mirror for front camera.
         matrix.setScale(mirror ? -1 : 1, 1);
