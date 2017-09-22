@@ -2,7 +2,6 @@
 // Created by duoyi on 2017/9/18.
 //
 #include <jni.h>
-#include <android/bitmap.h>
 #include <android/log.h>
 #include <string.h>
 #include <stdlib.h>
@@ -18,30 +17,70 @@
 #define LOGF(...) __android_log_print(ANDROID_LOG_FATAL,TAG ,__VA_ARGS__) // 定义LOGF类型
 
 JNIEXPORT void JNICALL
-Java_com_ymlion_mediasample_util_YuvUtil_scaleNV21(JNIEnv *env, jclass type, jbyteArray src,
-                                                   jint width, jint height, jbyteArray dst,
-                                                   jint dst_width, jint dst_height, jint mode) {
+Java_com_ymlion_mediasample_util_YuvUtil_yuvToRgb(JNIEnv *env, jclass type,
+                                                  jbyteArray src, jint width, jint height,
+                                                  jint dst_width, jint dst_height,
+                                                  jint orientation, jint format,
+                                                  jint scaleMode, jobject surface,
+                                                  jboolean front) {
     jbyte *srcData = (*env)->GetByteArrayElements(env, src, NULL);
-    jbyte *dstData = (*env)->GetByteArrayElements(env, dst, NULL);
 
     int y_stride = width;
+    int uv_stride = width;
     int u_stride = (width + 1) / 2;
     int v_stride = u_stride;
     size_t ySize = (size_t) (y_stride * height);
-    size_t uSize = (size_t) (ySize >> 2);
+    size_t uSize = ySize >> 2;
+
+    uint8 *I420Data = malloc(sizeof(u_char) * width * height * 3 / 2);
+
+    NV12ToI420((const uint8 *) srcData, y_stride, (const uint8 *) (srcData + ySize),
+               uv_stride,
+               I420Data, y_stride,
+               I420Data + ySize, u_stride, I420Data + ySize + uSize, v_stride, width, height);
+
+    uint8 *dstData = malloc(sizeof(u_char) * dst_width * dst_height * 3 / 2);
+
     int dst_y_stride = dst_width;
     int dst_u_stride = (dst_width + 1) / 2;
     int dst_v_stride = dst_u_stride;
     size_t dst_ySize = (size_t) (dst_y_stride * dst_height);
-    size_t dst_uSize = (size_t) (dst_ySize >> 2);
-    I420Scale((uint8 *) srcData, width, (uint8 *) srcData + ySize, u_stride,
-              (uint8 *) srcData + ySize + uSize, v_stride, width, height, (uint8 *) dstData,
-              dst_y_stride, (uint8 *) dstData + dst_ySize, dst_u_stride,
-              (uint8 *) dstData + dst_ySize + dst_uSize, dst_v_stride, dst_width, dst_height,
-              (enum FilterMode) mode);
+    size_t dst_uSize = dst_ySize >> 2;
+    I420Scale(I420Data, width, I420Data + ySize, u_stride,
+              I420Data + ySize + uSize, v_stride, width, height, dstData,
+              dst_y_stride, dstData + dst_ySize, dst_u_stride,
+              dstData + dst_ySize + dst_uSize, dst_v_stride, dst_width, dst_height,
+              (enum FilterMode) scaleMode);
+
+    ANativeWindow *nativeWindow;
+    ANativeWindow_Buffer windowBuffer;
+    //获取界面传下来的surface
+    nativeWindow = ANativeWindow_fromSurface(env, surface);
+    if (0 == nativeWindow) {
+        LOGD("Couldn't get native window from surface.\n");
+        return;
+    }
+    if (0 >
+        ANativeWindow_setBuffersGeometry(nativeWindow, dst_width, dst_height,
+                                         WINDOW_FORMAT_RGBA_8888)) {
+        LOGD("Couldn't set buffers geometry.\n");
+        ANativeWindow_release(nativeWindow);
+        return;
+    }
+    if (ANativeWindow_lock(nativeWindow, &windowBuffer, NULL) < 0) {
+        LOGD("cannot lock window");
+    } else {
+        I420ToARGB(dstData, dst_y_stride, dstData + dst_ySize, dst_u_stride,
+                   dstData + dst_ySize + dst_uSize, dst_v_stride, windowBuffer.bits,
+                   windowBuffer.stride * 4,
+                   dst_width, dst_height);
+        ANativeWindow_unlockAndPost(nativeWindow);
+    }
 
     (*env)->ReleaseByteArrayElements(env, src, srcData, 0);
-    (*env)->ReleaseByteArrayElements(env, dst, dstData, 0);
+
+    free(I420Data);
+    free(dstData);
 }
 
 JNIEXPORT void JNICALL

@@ -21,8 +21,9 @@ public class YuvUtil {
 
     private static final String TAG = "YuvUtil";
 
-    public static native void scaleNV21(byte[] src, int width, int height, byte[] dst, int dstWidth,
-            int dstHeight, int mode);
+    public static native void yuvToRgb(byte[] yuvData, int width, int height, int dstWidth,
+            int dstHeight, int orientation, int format, int scaleMode, Surface surface,
+            boolean front);
 
     public static native void convertToARGB(byte[] yuvData, int width, int height, int dstWidth,
             int dstHeight, int orientation, int format, int scaleMode, Surface surface,
@@ -90,10 +91,12 @@ public class YuvUtil {
     }
 
     public static boolean drawByYuv(Camera camera, int orientation, int displayWidth,
-            int displayHeight, SurfaceHolder surface, Bitmap bitmap, byte[] data) {
+            int displayHeight, Surface surface, byte[] data, boolean front) {
         long s = System.currentTimeMillis();
         Camera.Size size = camera.getParameters().getPreviewSize();
-        int displaySize = displayWidth * displayHeight;
+        YuvUtil.yuvToRgb(data, size.width, size.height, displayWidth, displayHeight, orientation, 1,
+                0, surface, front);
+        Log.d(TAG, "drawByYuv: " + orientation + " ; total = " + (System.currentTimeMillis() - s));
         return true;
     }
 }
