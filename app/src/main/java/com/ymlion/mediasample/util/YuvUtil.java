@@ -12,7 +12,6 @@ import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import java.io.ByteArrayOutputStream;
-import java.nio.ByteBuffer;
 
 /**
  * Created by YMlion on 2017/9/18.
@@ -22,22 +21,12 @@ public class YuvUtil {
 
     private static final String TAG = "YuvUtil";
 
-    public static native void convertToRgba(byte[] yuvBytes, int width, int height, byte[] argb,
-            int mode);
-
     public static native void scaleNV21(byte[] src, int width, int height, byte[] dst, int dstWidth,
             int dstHeight, int mode);
-
-    public static native void scaleARGB(byte[] src, int width, int height, byte[] dst, int dstWidth,
-            int dstHeight, int mode);
-
-    public static native void rotateARGB(byte[] src, byte[] dst, int width, int height, int mode);
 
     public static native void convertToARGB(byte[] yuvData, int width, int height, int dstWidth,
             int dstHeight, int orientation, int format, int scaleMode, Surface surface,
             boolean front);
-
-    public static native void fillBitmap(Bitmap dst, byte[] src, int size);
 
     public static boolean drawByBitmap(Camera camera, int orientation, int displayWidth,
             int displayHeight, boolean isFront, SurfaceHolder surface, byte[] data) {
@@ -105,28 +94,6 @@ public class YuvUtil {
         long s = System.currentTimeMillis();
         Camera.Size size = camera.getParameters().getPreviewSize();
         int displaySize = displayWidth * displayHeight;
-        byte[] dst = new byte[displaySize * 3 / 2];
-        YuvUtil.scaleNV21(data, size.width, size.height, dst, displayWidth, displayHeight, 1);
-        long s1 = System.currentTimeMillis() - s;
-        byte[] rgbaData = new byte[displaySize * 4];
-        YuvUtil.convertToRgba(dst, displayWidth, displayHeight, rgbaData, 1);
-        long s2 = System.currentTimeMillis() - s;
-        ByteBuffer buffer = ByteBuffer.allocate(displaySize * 4);
-        buffer.put(rgbaData);
-        buffer.rewind();
-        bitmap.copyPixelsFromBuffer(buffer);
-        long s3 = System.currentTimeMillis() - s;
-        Canvas canvas = surface.lockCanvas(null);
-        canvas.drawBitmap(bitmap, 0, 0, null);
-        surface.unlockCanvasAndPost(canvas);
-        Log.d(TAG, "handleMessage: "
-                + s1
-                + " ; "
-                + s2
-                + " ; "
-                + s3
-                + " ; "
-                + (System.currentTimeMillis() - s));
         return true;
     }
 }

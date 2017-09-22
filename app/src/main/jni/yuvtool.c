@@ -18,38 +18,6 @@
 #define LOGF(...) __android_log_print(ANDROID_LOG_FATAL,TAG ,__VA_ARGS__) // 定义LOGF类型
 
 JNIEXPORT void JNICALL
-Java_com_ymlion_mediasample_util_YuvUtil_convertToRgba(JNIEnv *env, jclass type,
-                                                       jbyteArray yuvBytes_, jint width,
-                                                       jint height, jbyteArray rgba_, jint mode) {
-
-    LOGD("convert to argb");
-    uint8 *yuvData = (uint8 *) (*env)->GetByteArrayElements(env, yuvBytes_, NULL);
-    uint8 *rgbData = (uint8 *) (*env)->GetByteArrayElements(env, rgba_, NULL);
-
-    int rgba_stride = width * 4;
-    int y_stride = width;
-    int uv_stride = (width + 1) / 2 * 2;
-    size_t ySize = (size_t) (y_stride * height);
-
-    switch (mode) {
-        case 1:
-            NV12ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
-                       rgbData, rgba_stride, width, height);
-            break;
-        case 2:
-            NV21ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
-                       rgbData, rgba_stride, width, height);
-            break;
-        default:
-            ConvertToARGB(yuvData, ySize * 3 / 2, rgbData, rgba_stride, 0, 0, width, height, width,
-                          height, (enum RotationMode) 0, FOURCC('N', 'V', '1', '2'));
-    }
-
-    (*env)->ReleaseByteArrayElements(env, yuvBytes_, (jbyte *) yuvData, 0);
-    (*env)->ReleaseByteArrayElements(env, rgba_, (jbyte *) rgbData, 0);
-}
-
-JNIEXPORT void JNICALL
 Java_com_ymlion_mediasample_util_YuvUtil_scaleNV21(JNIEnv *env, jclass type, jbyteArray src,
                                                    jint width, jint height, jbyteArray dst,
                                                    jint dst_width, jint dst_height, jint mode) {
