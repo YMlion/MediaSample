@@ -31,8 +31,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-@SuppressWarnings("deprecation") public class CameraCapture
-        implements Camera.FaceDetectionListener, Handler.Callback {
+@SuppressWarnings("deprecation") public class CameraCapture implements Camera.FaceDetectionListener, Handler.Callback,
+        Camera.PreviewCallback {
     private static final String TAG = CameraCapture.class.getSimpleName();
     public static final int FLASH_MODE_OFF = 0;
     public static final int FLASH_MODE_ON = 1;
@@ -58,32 +58,20 @@ import java.util.List;
     private SurfaceTexture texture;
     private Handler mHandler;
     private byte[] gBuffer;
-    private Bitmap textureBmp;
     private int mDisplayWidth;
     private int mDisplayHeight;
     private int mOrientation;
+    private boolean faceDetectSupport = true;
+    /**
+     * 0: none; 1: detected; 2: cleared
+     */
+    private int faceState = 2;
 
     public CameraCapture(Context context) {
         mContext = new WeakReference<Context>(context);
         HandlerThread thread = new HandlerThread("surface");
         thread.start();
         mHandler = new Handler(thread.getLooper(), this);
-    }
-
-    public void setCameraType(int cameraType) {
-        mCameraFacing = getCameraFacing(cameraType);
-    }
-
-    public void changeFacing() {
-        if (mCameraFacing == getCameraFacing(FRONT)) {
-            setCameraType(BACK);
-        } else {
-            setCameraType(FRONT);
-        }
-    }
-
-    public void setCameraCallback(ICameraCallback callback) {
-        mCallback = callback;
     }
 
     public void open(SurfaceHolder holder, int wantedMinPreviewWidth) {
@@ -129,39 +117,19 @@ import java.util.List;
             if (mOrientation > 0) {
                 mCamera.setDisplayOrientation(mOrientation);
             }
-            /*if (mOrientation == 90 || mOrientation == 270) {
-                int tmp = mDisplayHeight;
-                mDisplayHeight = mDisplayWidth;
-                mDisplayWidth = tmp;
-                Log.w(TAG, "width and height exchanged!!!");
-            }*/
-            //mCamera.setPreviewDisplay(mSurface);
             mCamera.setPreviewTexture(texture);
             int bufferSize = mPreviewSize.width * mPreviewSize.height;
-            //textureBmp =
-            //        Bitmap.createBitmap(mDisplayWidth, mDisplayHeight, Bitmap.Config.ARGB_8888);
             bufferSize =
                     2 * bufferSize * ImageFormat.getBitsPerPixel(parameters.getPreviewFormat()) / 8;
             gBuffer = new byte[bufferSize];
             mCamera.addCallbackBuffer(gBuffer);
-            mCamera.setPreviewCallbackWithBuffer(new Camera.PreviewCallback() {
-                @Override public void onPreviewFrame(byte[] data, Camera camera) {
-                    Message message = new Message();
-                    message.obj = data;
-                    mHandler.sendMessage(message);
-                    if (closed) {
-                        return;
-                    }
-                    mCamera.addCallbackBuffer(gBuffer);
-                }
-            });
+            mCamera.setPreviewCallbackWithBuffer(this);
             mCamera.startPreview();
             closed = false;
-            // TODO: 2017/9/15 face detect
-            /*if (mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
+            if (faceDetectSupport && mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
                 mCamera.setFaceDetectionListener(this);
                 mCamera.startFaceDetection();
-            }*/
+            }
         } catch (Exception e) {
             Log.e(TAG, "failed to open camera: " + mCameraFacing);
             closed = true;
@@ -182,15 +150,35 @@ import java.util.List;
     public void close() {
         closed = true;
         if (null != mCamera) {
-            /*if (mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
+            if (faceDetectSupport && mCamera.getParameters().getMaxNumDetectedFaces() > 0) {
                 mCamera.stopFaceDetection();
-            }*/
+            }
             mCamera.stopPreview();
             mCamera.release();
             mCamera = null;
             texture.release();
             texture = null;
         }
+    }
+
+    public void setFaceDetectSupport(boolean faceDetectSupport) {
+        this.faceDetectSupport = faceDetectSupport;
+    }
+
+    public void setCameraType(int cameraType) {
+        mCameraFacing = getCameraFacing(cameraType);
+    }
+
+    public void changeFacing() {
+        if (mCameraFacing == getCameraFacing(FRONT)) {
+            setCameraType(BACK);
+        } else {
+            setCameraType(FRONT);
+        }
+    }
+
+    public void setCameraCallback(ICameraCallback callback) {
+        mCallback = callback;
     }
 
     public void setFlashMode(int flashMode) {
@@ -351,6 +339,7 @@ import java.util.List;
         if (faces.length < 1) {
             return;
         }
+        faceState = 1;
         Canvas canvas = mFaceSurface.lockCanvas();//锁定Surface 并拿到Canvas
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);// 清除上一次绘制
         Matrix matrix = new Matrix();
@@ -364,8 +353,8 @@ import java.util.List;
         //        偏移值从OrientationEventListener获得，具体Google
         //        canvas.rotate(-degrees); 默认是逆时针旋转
         //        matrix.postRotate(degrees);默认是顺时针旋转
-        for (int i = 0; i < faces.length; i++) {
-            RectF rect = new RectF(faces[i].rect);
+        for (Camera.Face face : faces) {
+            RectF rect = new RectF(face.rect);
             Log.d(TAG, "onFaceDetection: " + rect);
             matrix.mapRect(rect);//应用到rect上
             Log.i(TAG, "onFaceDetection: " + rect);
@@ -402,6 +391,24 @@ import java.util.List;
         mPaint.setColor(Color.RED);
         mPaint.setStrokeWidth(5);
         mPaint.setStyle(Paint.Style.STROKE);
+    }
+
+    @Override public void onPreviewFrame(byte[] data, Camera camera) {
+        int state = faceState;
+        faceState = 0;
+        if (state == 0) {
+            Canvas canvas = mFaceSurface.lockCanvas();//锁定Surface 并拿到Canvas
+            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);// 清除上一次绘制
+            mFaceSurface.unlockCanvasAndPost(canvas);
+            faceState = 2;
+        }
+        Message message = new Message();
+        message.obj = data;
+        mHandler.sendMessage(message);
+        if (closed) {
+            return;
+        }
+        mCamera.addCallbackBuffer(gBuffer);
     }
 
     private static class CompareSizesByArea implements Comparator<Size> {

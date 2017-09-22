@@ -123,6 +123,9 @@ class Camera1Activity : Activity(), ICameraCallback {
         val params = surfaceView.layoutParams
         params.height = height
         surfaceView.layoutParams = params
+        var lp = faceView.layoutParams
+        lp.height = height
+        faceView.layoutParams = lp
     }
 
     override fun onImageAvailable(data: ByteArray?) {
@@ -148,7 +151,6 @@ class Camera1Activity : Activity(), ICameraCallback {
     companion object {
         init {
             System.loadLibrary("yuvtool")
-//            System.loadLibrary("yuv")
         }
     }
 
