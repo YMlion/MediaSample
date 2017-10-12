@@ -16,6 +16,10 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,TAG ,__VA_ARGS__) // 定义LOGE类型
 #define LOGF(...) __android_log_print(ANDROID_LOG_FATAL,TAG ,__VA_ARGS__) // 定义LOGF类型
 
+void imgToGrayARGB(int rgb_size, u_char *rgbData);
+
+void imgToNoColorARGB(int rgb_size, u_char *rgbData);
+
 JNIEXPORT void JNICALL
 Java_com_ymlion_mediasample_util_YuvUtil_yuvToRgb(JNIEnv *env, jclass type,
                                                   jbyteArray src, jint width, jint height,
@@ -83,7 +87,36 @@ Java_com_ymlion_mediasample_util_YuvUtil_yuvToRgb(JNIEnv *env, jclass type,
     free(dstData);
 }
 
-JNIEXPORT void JNICALL
+void imgToGrayARGB(int rgb_size, u_char *rgbData) {
+    for (int i = 0; i < rgb_size; i += 4) {
+        u_char red = rgbData[i + 0]; // 获得red值
+        u_char green = rgbData[i + 1]; // 获得green值
+        u_char blue = rgbData[i + 2]; // 获得blue值
+        u_char color = (red * 38 + green * 75 + blue * 15) >> 7; // 灰度算法（16位运算下7位精度）
+        red = green = blue = color; // 以灰度值来设置rgb
+        rgbData[i + 0] = red;
+        rgbData[i + 1] = green;
+        rgbData[i + 2] = blue;
+        rgbData[i + 3] = 0xff;//设置为不透明
+    }
+}
+
+void imgToNoColorARGB(int rgb_size, u_char *rgbData) {
+    for (int i = 0; i < rgb_size; i += 4) {
+        u_char red = rgbData[i + 0]; // 获得red值
+        u_char green = rgbData[i + 1]; // 获得green值
+        u_char blue = rgbData[i + 2]; // 获得blue值
+        u_char color = (red + green + blue) / 3 >= 100 ? 255 : 0; // 灰度算法（16位运算下7位精度）
+
+        red = green = blue = color; // 以灰度值来设置rgb
+        rgbData[i + 0] = red;
+        rgbData[i + 1] = green;
+        rgbData[i + 2] = blue;
+        rgbData[i + 3] = 0xff;//设置为不透明
+    }
+}
+
+void JNICALL
 Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
                                                        jbyteArray yuvData_, jint width, jint height,
                                                        jint dstWidth, jint dstHeight,
@@ -95,29 +128,32 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
     int rgba_stride = width * 4;
     int y_stride = width;
     size_t ySize = (size_t) (y_stride * height);
-    char *rgbData = malloc(sizeof(char) * width * height * 4);
+    int rgb_size = width * height * 4;
+    u_char *rgbData = malloc(sizeof(u_char) * rgb_size);
 
     // yuv convert to argb，只能是NV12，不清楚原因
     switch (format) {
         case 1:
             NV12ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
-                       (uint8 *) rgbData, rgba_stride, width, height);
+                       rgbData, rgba_stride, width, height);
             break;
         case 2:
             NV21ToARGB(yuvData, y_stride, yuvData + ySize, (width + 1) / 2 * 2,
-                       (uint8 *) rgbData, rgba_stride, width, height);
+                       rgbData, rgba_stride, width, height);
             break;
         default:
-            ConvertToARGB(yuvData, ySize * 3 / 2, (uint8 *) rgbData, rgba_stride, 0, 0, width,
+            ConvertToARGB(yuvData, ySize * 3 / 2, rgbData, rgba_stride, 0, 0, width,
                           height, width,
                           height, (enum RotationMode) 0, FOURCC('N', 'V', '1', '2'));
     }
 
-    char *rotateData;
+//    imgToNoColorARGB(rgb_size, rgbData);
+
+    u_char *rotateData;
 
     // rotate argb
     if (orientation > 0) {
-        rotateData = malloc(sizeof(char) * width * height * 4);
+        rotateData = malloc(sizeof(u_char) * width * height * 4);
         int src_stride = width * 4;
         int dst_stride = height * 4;
         if (orientation == 180) {
@@ -125,7 +161,7 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
             dst_stride = width * 4;
         }
 
-        ARGBRotate((const uint8 *) rgbData, src_stride, (uint8 *) rotateData, dst_stride, width,
+        ARGBRotate((const uint8 *) rgbData, src_stride, rotateData, dst_stride, width,
                    height, (enum RotationMode) orientation);
     } else {
         rotateData = rgbData;
@@ -167,7 +203,7 @@ Java_com_ymlion_mediasample_util_YuvUtil_convertToARGB(JNIEnv *env, jclass type,
             dst = (uint8 *) windowBuffer.bits;
         }
 
-        ARGBScale((uint8 *) rotateData, src_stride, w, h, dst, stride, dstWidth,
+        ARGBScale(rotateData, src_stride, w, h, dst, stride, dstWidth,
                   dstHeight, (enum FilterMode) scaleMode);
         ANativeWindow_unlockAndPost(nativeWindow);
     }

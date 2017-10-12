@@ -347,7 +347,7 @@ public class RecordManager {
                                 info.presentationTimeUs -= startTime;
                                 ByteBuffer buffer = videoEncoder.getOutputBuffer(index);
                                 muxer.writeSampleData(videoTrack, buffer, info);
-                                // 直接写入文件的是未封装的h264数据
+                                // todo 直接写入文件的是未封装的h264数据
                                 /*byte[] bytes = new byte[info.size];
                                 buffer.get(bytes);
                                     try {

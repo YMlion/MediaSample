@@ -70,6 +70,7 @@ class Camera1Activity : Activity(), ICameraCallback {
         })
         faceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceDestroyed(holder: SurfaceHolder?) {
+                holder?.surface?.release()
             }
 
             override fun surfaceCreated(holder: SurfaceHolder?) {
