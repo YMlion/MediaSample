@@ -43,7 +43,7 @@ class MenuActivity : Activity() {
     private lateinit var rtmp: Rtmp
 
     private fun rtmpConnect() {
-        rtmp = Rtmp("10.32.10.219")
+        rtmp = Rtmp("10.32.10.219", "test", "live")
         try {
             rtmp.connect()
         } catch (e: Exception) {
