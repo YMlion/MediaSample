@@ -39,6 +39,22 @@ public class Rtmp {
         HandShake handShake = new HandShake(outputStream, inputStream);
         handShake.handShake();
         System.out.println("shake hand done.");
+
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    handleReceivedData();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
         // TODO: 2017/10/13
         /*
          * 1. connect app : test
@@ -49,9 +65,17 @@ public class Rtmp {
         // 1. connect
         Command command = new Command(outputStream);
         command.connect(appName, tcUrl, streamName);
+        command.publish(streamName);
 
         connected = true;
         return connected;
+    }
+
+    private void handleReceivedData() throws IOException {
+        while (true) {
+            ChunkReader reader = new ChunkReader();
+            boolean b = reader.readChunk(inputStream);
+        }
     }
 
     public void close() {

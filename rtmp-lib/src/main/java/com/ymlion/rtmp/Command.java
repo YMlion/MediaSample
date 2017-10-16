@@ -8,6 +8,8 @@ import com.ymlion.rtmp.bean.RString;
 import com.ymlion.rtmp.bean.RtmpHeader;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Created by YMlion on 2017/10/13.
@@ -44,23 +46,46 @@ public class Command {
         out.write(objBytes);
         out.flush();
         System.out.println("rtmp connected.");
-        //createStream(streamName, "releaseStream");
-        //createStream(streamName, "FCPublish");
-        //createStream(null, "createStream");
+        execute("releaseStream", 2.0, streamName);
+        execute("FCPublish", 2.0, streamName);
+        execute("createStream", 2.0, (List<String>) null);
+        execute("_checkbw", 5.0, (List<String>) null);
     }
 
-    private void createStream(String streamName, String command) throws IOException {
+    public void publish(String streamName) throws IOException {
+        List<String> list = new ArrayList<>();
+        list.add("live");
+        list.add("live");
+        execute("publish", 6.0, list);
+    }
+
+    private void execute(String command, double number, String string) throws IOException {
+        List<String> strings = new ArrayList<>();
+        strings.add(string);
+        execute(command, number, strings);
+    }
+
+    private void execute(String command, double number, List<String> strings) throws IOException {
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         int total = 0;
         RObject name = new RString(command, false);
         total += name.getSize();
-        RObject num = new RNumber(2.0);
+        RObject num = new RNumber(number);
         total += num.getSize();
         RObject rNull = new RNull();
         total += rNull.getSize();
-        RObject s = null;
-        if (streamName != null) {
-            s = new RString(streamName, false);
-            total += s.getSize();
+        List<RObject> objects = null;
+        if (strings != null && strings.size() > 0) {
+            objects = new ArrayList<>();
+            for (String string : strings) {
+                RString s = new RString(string, false);
+                total += s.getSize();
+                objects.add(s);
+            }
         }
         RtmpHeader header = new RtmpHeader();
         header.fmt = 1;
@@ -72,8 +97,10 @@ public class Command {
         name.write(out);
         num.write(out);
         rNull.write(out);
-        if (s != null) {
-            s.write(out);
+        if (objects != null) {
+            for (RObject object : objects) {
+                object.write(out);
+            }
         }
         out.flush();
     }

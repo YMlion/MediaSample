@@ -1,6 +1,8 @@
 package com.ymlion.rtmp.bean;
 
+import com.ymlion.rtmp.util.ByteUtil;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 
 import static com.ymlion.rtmp.util.ByteUtil.writeInt;
@@ -78,5 +80,41 @@ public class RtmpHeader {
                 break;
         }
         out.write(header, 0, total);
+    }
+
+    public int read(InputStream in) throws IOException {
+        int b1 = in.read();
+        if (b1 == -1) {
+            return -1;
+        }
+        fmt = b1 >>> 6;
+        CSID = b1 & 0x3f;
+        System.out.println("rtmp chunk header fmt is " + fmt + " ; cs id is " + CSID);
+        byte[] head = new byte[11];
+        int r = 0;
+        switch (fmt) {
+            case 0:
+                r = in.read(head);
+                msgLength = ByteUtil.bytes2Int(3, head, 3);
+                msgType = head[6];
+                System.out.println("rtmp chunk header type is " + msgType);
+                break;
+            case 1:
+                r = in.read(head, 0, 7);
+                msgLength = ByteUtil.bytes2Int(3, head, 3);
+                break;
+            case 2:
+                r = in.read(head, 0, 3);
+                msgLength = 128;
+                break;
+            default:
+                msgLength = 128;
+                break;
+        }
+        if (r <= 0) {
+            return -1;
+        }
+
+        return msgLength;
     }
 }

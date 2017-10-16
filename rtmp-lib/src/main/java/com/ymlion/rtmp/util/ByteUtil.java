@@ -21,6 +21,14 @@ public class ByteUtil {
         }
     }
 
+    public static int bytes2Int(int size, byte[] src, int off) {
+        int d = 0;
+        for (int i = 0; i < size; i++) {
+            d += src[i + off] << (8 * (size - 1 - i));
+        }
+        return d;
+    }
+
     /**
      * little-endian
      *
