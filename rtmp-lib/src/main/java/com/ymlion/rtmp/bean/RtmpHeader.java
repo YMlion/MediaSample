@@ -12,6 +12,74 @@ import static com.ymlion.rtmp.util.ByteUtil.writeInt;
  */
 
 public class RtmpHeader {
+
+    /**
+     * 协议控制消息：set chunk size, default is 128 bytes, 4 bytes, 1st bit is 0, 31 bits is chunk size
+     * <p>
+     * Message Stream ID必须为0（代表控制流信息），CSID必须为2
+     */
+    public static final int MSG_TYPE_SET_CHUNK_SIZE = 0x1;
+    /**
+     * 协议控制消息：abort the message that have same CSID, 4 bytes--CSID
+     * <p>
+     * Message Stream ID必须为0（代表控制流信息），CSID必须为2
+     */
+    public static final int MSG_TYPE_ABORT_MESSAGE = 0x2;
+    /**
+     * 协议控制消息：set window size, the max size bytes to send before response, 4 bytes
+     * <p>
+     * Message Stream ID必须为0（代表控制流信息），CSID必须为2
+     */
+    public static final int MSG_TYPE_ACKNOWLEDGEMENT = 0x3;
+    /**
+     * 包含用户控制事件，例如开始传输，发送时chunk头部中的msgSID = 1, CSID = 2, msgType = 4
+     */
+    public static final int MSG_TYPE_USER_CONTROL = 0x4;
+    /**
+     * 协议控制消息：发送端在接收到接受端返回的两个ACK间最多可以发送的字节数, 4 bytes
+     * <p>
+     * Message Stream ID必须为0（代表控制流信息），CSID必须为2
+     */
+    public static final int MSG_TYPE_WINDOW_ACK_SIZE = 0x5;
+    /**
+     * 协议控制消息：限制对端的输出带宽, 5 bytes: size is 4 bytes, 1 byte is limit type
+     * <p>
+     * Message Stream ID必须为0（代表控制流信息），CSID必须为2
+     * <p>
+     * 1. Hard(Limit Type＝0):接受端应该将Window Ack Size设置为消息中的值
+     * <p>
+     * 2. Soft(Limit Type=1):接受端可以讲Window Ack Size设为消息中的值，也可以保存原来的值（前提是原来的Size小与该控制消息中的Window Ack
+     * Size）
+     * <p>
+     * 3. Dynamic(Limit Type=2):如果上次的Set Peer Bandwidth消息中的Limit Type为0，本次也按Hard处理，否则忽略本消息，不去设置Window
+     * Ack Size。
+     */
+    public static final int MSG_TYPE_SET_PEER_BW = 0x6;
+    /**
+     * audio message
+     */
+    public static final int MSG_TYPE_AUDIO = 0x8;
+    /**
+     * video message
+     */
+    public static final int MSG_TYPE_VIDEO = 0x9;
+    /**
+     * data message, like metadata
+     */
+    public static final int MSG_TYPE_DATA = 0x12;
+    /**
+     * shared object message
+     */
+    public static final int MSG_TYPE_SHARED = 0x13;
+    /**
+     * command message, like connect, publish etc.
+     */
+    public static final int MSG_TYPE_COMMAND = 0x14;
+    /**
+     * aggregate message
+     */
+    public static final int MSG_TYPE_AGGREGATE = 0x16;
+
     /**
      * chunk type, 2 bit
      */
@@ -63,7 +131,7 @@ public class RtmpHeader {
                 header[8] = (byte) (msgSID & 0xff);
                 header[9] = (byte) (msgSID >> 8 & 0xff);
                 header[10] = (byte) (msgSID >> 16 & 0xff);
-                header[8] = (byte) (msgSID >> 24 & 0xff);
+                header[11] = (byte) (msgSID >> 24 & 0xff);
                 total += 11;
                 break;
             case 1:

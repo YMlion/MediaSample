@@ -136,6 +136,7 @@ public class RecordManager {
     private Handler videoHandler;
     private Handler audioHandler;
     private boolean recordStop = false;
+    private RecordListener recordListener;
 
     public RecordManager(Context context, SurfaceTexture surfaceTexture) {
         this.mContext = context;
@@ -266,13 +267,11 @@ public class RecordManager {
                     if (what == 1) {
                         ByteBuffer buffer = audioEncoder.getInputBuffer(index);
                         int readLength = audioRecord.read(buffer, audioBufferSize);
-                        Log.d(TAG, "handleMessage: is this run " + readLength);
                         if (readLength > 0) {
                             if (startTime == 0) {
                                 startTime = System.nanoTime() / 1000;
                             }
                             long presentationTimeUs = System.nanoTime() / 1000 - startTime;
-                            Log.d(TAG, "handleMessage: " + presentationTimeUs);
                             audioEncoder.queueInputBuffer(index, 0, readLength, presentationTimeUs,
                                     0);
                         }
@@ -300,11 +299,11 @@ public class RecordManager {
     private void setupVideoEncoder() throws IOException {
         videoTrack = -1;
         String mime = "video/avc";    //编码的MIME
-        int rate = 12800000;            //波特率，12800kb
+        int rate = 6400000;            //波特率，12800kb
         int frameRate = 30;           //帧率，30帧
         int frameInterval = 1;        //关键帧一秒一关键帧
 
-        MediaFormat format = MediaFormat.createVideoFormat(mime, 1920, 1080);
+        MediaFormat format = MediaFormat.createVideoFormat(mime, 720, 480);
         format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
         format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, frameInterval);
@@ -347,6 +346,11 @@ public class RecordManager {
                                 info.presentationTimeUs -= startTime;
                                 ByteBuffer buffer = videoEncoder.getOutputBuffer(index);
                                 muxer.writeSampleData(videoTrack, buffer, info);
+                                if (recordListener != null) {
+                                    byte[] bytes = new byte[info.size];
+                                    buffer.get(bytes);
+                                    recordListener.onVideoFrame(bytes, info.presentationTimeUs);
+                                }
                                 // todo 直接写入文件的是未封装的h264数据
                                 /*byte[] bytes = new byte[info.size];
                                 buffer.get(bytes);
@@ -715,5 +719,15 @@ public class RecordManager {
 
         @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {
         }
+    }
+
+    public void setRecordListener(RecordListener listener) {
+        this.recordListener = listener;
+    }
+
+    public interface RecordListener {
+        void onVideoFrame(byte[] frame, long time);
+
+        void onAudioFrame(byte[] frame, long time);
     }
 }

@@ -7,12 +7,10 @@ import com.ymlion.mediasample.capture.Camera1Activity
 import com.ymlion.mediasample.capture.CaptureActivity
 import com.ymlion.mediasample.player.VideoPlayActivity
 import com.ymlion.mediasample.record.RecordActivity
-import com.ymlion.rtmp.Rtmp
 import kotlinx.android.synthetic.main.activity_menu.btn_capture
 import kotlinx.android.synthetic.main.activity_menu.btn_capture1
 import kotlinx.android.synthetic.main.activity_menu.btn_playback
 import kotlinx.android.synthetic.main.activity_menu.btn_record
-import kotlin.concurrent.thread
 
 class MenuActivity : Activity() {
 
@@ -32,15 +30,15 @@ class MenuActivity : Activity() {
             startActivity(Intent(this, Camera1Activity::class.java))
         }
 
-        thread {
+        /*thread {
             rtmpConnect()
             while (!close) {
             }
             rtmp.close()
-        }
+        }*/
     }
 
-    private lateinit var rtmp: Rtmp
+    /*private lateinit var rtmp: Rtmp
 
     private fun rtmpConnect() {
         rtmp = Rtmp("10.32.10.219", "test", "live")
@@ -56,5 +54,5 @@ class MenuActivity : Activity() {
     override fun onDestroy() {
         close = true
         super.onDestroy()
-    }
+    }*/
 }

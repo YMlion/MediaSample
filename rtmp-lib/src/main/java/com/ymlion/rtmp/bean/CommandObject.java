@@ -1,6 +1,8 @@
 package com.ymlion.rtmp.bean;
 
 import com.ymlion.rtmp.util.ByteUtil;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,7 +25,7 @@ public class CommandObject {
      */
     public int endMarker = 0x9;
 
-    private int byteSize = 4;
+    protected int byteSize = 4;
 
     public void put(String k, String v) {
         if (objects == null) {
@@ -58,6 +60,10 @@ public class CommandObject {
         byteSize += key.getSize() + value.getSize();
     }
 
+    public int getByteSize() {
+        return byteSize;
+    }
+
     public byte[] getBytes() {
         byte[] data = new byte[byteSize];
         data[0] = type;
@@ -68,5 +74,9 @@ public class CommandObject {
         }
         ByteUtil.writeInt(3, endMarker, data, p);
         return data;
+    }
+
+    public void write(OutputStream out) throws IOException {
+        out.write(getBytes());
     }
 }

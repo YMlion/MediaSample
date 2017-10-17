@@ -11,8 +11,11 @@ import android.util.Log
 import android.view.TextureView
 import android.view.View
 import com.ymlion.mediasample.R.layout
+import com.ymlion.mediasample.record.RecordManager.RecordListener
+import com.ymlion.rtmp.Rtmp
 import kotlinx.android.synthetic.main.activity_record.record_seconds_tv
 import kotlinx.android.synthetic.main.activity_record.textureView
+import kotlin.concurrent.thread
 
 class RecordActivity : Activity() {
 
@@ -23,6 +26,30 @@ class RecordActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(layout.activity_record)
         initView()
+        thread {
+            rtmpConnect()
+            while (!close) {
+            }
+            rtmp.close()
+        }
+    }
+
+    private lateinit var rtmp: Rtmp
+
+    private fun rtmpConnect() { //        rtmp = Rtmp("10.32.10.219", "test", "live")
+        rtmp = Rtmp("23.106.136.168", "test", "live")
+        try {
+            rtmp.connect()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private var close: Boolean = false
+
+    override fun onDestroy() {
+        close = true
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -61,8 +88,8 @@ class RecordActivity : Activity() {
                 return false
             }
 
-            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
-//                Log.v("TAG", "onSurfaceTextureUpdated")
+            override fun onSurfaceTextureUpdated(
+                    surface: SurfaceTexture) { //                Log.v("TAG", "onSurfaceTextureUpdated")
             }
         }
     }
@@ -88,6 +115,22 @@ class RecordActivity : Activity() {
                 + " ; "
                 + textureView.height)
         rm.open(width, height)
+        rm.setRecordListener(object : RecordListener {
+            override fun onVideoFrame(frame: ByteArray?, time: Long) {
+                Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
+                thread {
+                    try {
+                        rtmp.sendVideo(frame, (time / 1000).toInt())
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+
+            override fun onAudioFrame(frame: ByteArray?, time: Long) {
+            }
+
+        })
     }
 
     override fun onStop() {
