@@ -135,7 +135,7 @@ public class Command {
         int totalSize = name.getSize() + name2.getSize() + object.getByteSize();
         header.msgLength = totalSize;
         header.write(out);
-        // é»˜è®¤æ˜¯128æ—¶ï¼Œéœ€è¦åˆ†å‰²msgä¸ºå‡ ä¸ªchunk
+        // Ä¬ÈÏÊÇ128Ê±£¬ĞèÒª·Ö¸îmsgÎª¼¸¸öchunk
         /*int part = totalSize / 128;
         int p = 128 - name.getSize() - name2.getSize();
         byte[] data = new byte[129];

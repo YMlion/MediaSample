@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.util.Arrays;
 
 public class Rtmp {
     private Socket socket;
@@ -17,12 +18,16 @@ public class Rtmp {
     private boolean connected = false;
     private BufferedInputStream inputStream;
     private BufferedOutputStream outputStream;
+    private static final int CHUNK_SIZE = 1024;
+
+    private byte[] preData = new byte[2164];
 
     public Rtmp(String rtmpHost, String app, String streamName) {
         this.rtmpHost = rtmpHost;
         this.appName = app;
         tcUrl = "rtmp://" + rtmpHost + "/" + app;
         this.streamName = streamName;
+        Arrays.fill(preData, (byte) 1);
     }
 
     public boolean connect() throws IOException {
@@ -57,7 +62,7 @@ public class Rtmp {
         }
 
         Command command = new Command(outputStream);
-        command.setChunkSize(4096);
+        command.setChunkSize(CHUNK_SIZE);
         command.connect(appName, tcUrl, streamName);
         command.publish(streamName);
         command.sendMetaData();
@@ -85,12 +90,8 @@ public class Rtmp {
         }
     }
 
-    public void sendVideo(byte[] frame, int time) throws IOException {
-        try {
-            Thread.sleep(20);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+    public synchronized void sendVideo(byte[] frame, int time) throws IOException {
+        frame = preData;
         RtmpHeader header = new RtmpHeader();
         header.fmt = 0;
         header.CSID = 4;
@@ -99,25 +100,27 @@ public class Rtmp {
         header.msgType = RtmpHeader.MSG_TYPE_VIDEO;
         header.msgSID = 1;
         header.write(outputStream);
-        if (frame.length < 4096) {
+        if (frame.length < CHUNK_SIZE) {
             outputStream.write(0x17);
             outputStream.write(frame);
             return;
         }
-        int part = frame.length / 4096 + 1;
+        int part = frame.length / CHUNK_SIZE + 1;
         int wb = 0;
         for (int i = 0; i < part; i++) {
             if (i == 0) {
                 outputStream.write(0x17);
-                outputStream.write(frame, wb, 4095);
-                wb += 4095;
+                outputStream.write(frame, wb, CHUNK_SIZE);
+                wb += CHUNK_SIZE - 1;
             } else {
                 outputStream.write(0xc4);
                 int left = frame.length - wb;
-                int size = left > 4096 ? wb : left;
+                int size = left > CHUNK_SIZE ? CHUNK_SIZE : left;
                 outputStream.write(frame, wb, size);
+                System.err.println("size : " + left + "; " + wb + "; " + i + "; " + part);
+                wb += CHUNK_SIZE;
             }
         }
-        outputStream.flush();
+        //outputStream.flush();
     }
 }

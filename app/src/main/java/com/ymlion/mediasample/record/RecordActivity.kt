@@ -118,13 +118,14 @@ class RecordActivity : Activity() {
         rm.setRecordListener(object : RecordListener {
             override fun onVideoFrame(frame: ByteArray?, time: Long) {
                 Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
-                thread {
+                if (frame!!.size > 50000) {
+                    return
+                } //                thread {
                     try {
                         rtmp.sendVideo(frame, (time / 1000).toInt())
                     } catch (e: Exception) {
                         e.printStackTrace()
-                    }
-                }
+                    } //                }
             }
 
             override fun onAudioFrame(frame: ByteArray?, time: Long) {

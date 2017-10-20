@@ -299,11 +299,11 @@ public class RecordManager {
     private void setupVideoEncoder() throws IOException {
         videoTrack = -1;
         String mime = "video/avc";    //编码的MIME
-        int rate = 6400000;            //波特率，12800kb
+        int rate = 12800000;            //波特率，12800kb
         int frameRate = 30;           //帧率，30帧
         int frameInterval = 1;        //关键帧一秒一关键帧
 
-        MediaFormat format = MediaFormat.createVideoFormat(mime, 720, 480);
+        MediaFormat format = MediaFormat.createVideoFormat(mime, 1920, 1080);
         format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
         format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, frameInterval);
