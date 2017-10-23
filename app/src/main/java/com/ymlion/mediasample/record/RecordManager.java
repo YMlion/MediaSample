@@ -257,6 +257,7 @@ public class RecordManager {
         if (audioHandler == null) {
             audioHandler = createHandler("audio", new Handler.Callback() {
                 long startTime = 0L;
+
                 @Override public boolean handleMessage(Message msg) {
                     if (recordStop) {
                         startTime = 0;
@@ -317,12 +318,15 @@ public class RecordManager {
             }
 
             @Override public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
+                Log.d(TAG, "onOutputFormatChanged: " + format);
                 if (format == null) {
                     format = videoEncoder.getOutputFormat();
                 }
-                Log.d(TAG, "onOutputFormatChanged: " + format);
                 videoTrack = muxer.addTrack(format);
                 Log.d(TAG, " video track is " + videoTrack);
+                if (recordListener != null) {
+                    recordListener.onVideoFormatChanged(format);
+                }
                 if (audioTrack >= 0) {
                     muxer.start();
                 }
@@ -729,5 +733,9 @@ public class RecordManager {
         void onVideoFrame(byte[] frame, long time);
 
         void onAudioFrame(byte[] frame, long time);
+
+        void onVideoFormatChanged(MediaFormat format);
+
+        void onAudioFormatChanged(MediaFormat format);
     }
 }

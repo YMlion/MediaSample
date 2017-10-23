@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
+import android.media.MediaFormat
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
@@ -15,12 +16,16 @@ import com.ymlion.mediasample.record.RecordManager.RecordListener
 import com.ymlion.rtmp.Rtmp
 import kotlinx.android.synthetic.main.activity_record.record_seconds_tv
 import kotlinx.android.synthetic.main.activity_record.textureView
+import java.io.BufferedOutputStream
+import java.io.FileOutputStream
+import java.io.OutputStream
 import kotlin.concurrent.thread
 
 class RecordActivity : Activity() {
 
     private lateinit var rm: RecordManager
     private lateinit var timer: CountDownTimer
+    private var out: OutputStream? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +114,8 @@ class RecordActivity : Activity() {
     }
 
     private fun openCamera(width: Int, height: Int) {
+        out = BufferedOutputStream(FileOutputStream(
+                externalCacheDir.absolutePath + "/" + System.currentTimeMillis() + ".h264"))
         rm = RecordManager(this, textureView.surfaceTexture)
         Log.d("MAIN", "openCamera: texture view size : "
                 + textureView.width
@@ -116,16 +123,45 @@ class RecordActivity : Activity() {
                 + textureView.height)
         rm.open(width, height)
         rm.setRecordListener(object : RecordListener {
+            override fun onVideoFormatChanged(format: MediaFormat?) {
+                val sps = format?.getByteBuffer("csd-0")
+                val pps = format?.getByteBuffer("csd-1")
+                val spsBytes = ByteArray(sps!!.limit())
+                sps.get(spsBytes)
+                val ppsBytes = ByteArray(pps!!.limit())
+                pps!!.get(ppsBytes)
+                Log.d("TAG", "onOutputFormatChanged: sps : "
+                        + spsBytes.size
+                        + "; pps : "
+                        + ppsBytes.size)
+                var builder = StringBuilder()
+                for (spsByte in spsBytes) {
+                    builder.append(spsByte.toInt()).append(' ')
+                }
+                Log.e("TAG", builder.toString())
+                builder = StringBuilder()
+                for (ppsByte in ppsBytes) {
+                    builder.append(ppsByte.toInt()).append(' ')
+                }
+                Log.e("TAG", builder.toString())
+                out?.write(spsBytes)
+                out?.write(ppsBytes)
+            }
+
+            override fun onAudioFormatChanged(format: MediaFormat?) {
+            }
+
             override fun onVideoFrame(frame: ByteArray?, time: Long) {
-                Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
-                if (frame!!.size > 50000) {
-                    return
-                } //                thread {
-                    try {
-                        rtmp.sendVideo(frame, (time / 1000).toInt())
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    } //                }
+                Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")/*try {
+                    rtmp.sendVideo(frame, (time / 1000).toInt())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }*/
+                try {
+                    out?.write(frame)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
 
             override fun onAudioFrame(frame: ByteArray?, time: Long) {
@@ -145,6 +181,8 @@ class RecordActivity : Activity() {
         rm.stopRecord()
         timer.cancel()
         record_seconds_tv.visibility = View.GONE
+        out?.flush()
+        out?.close()
     }
 
     fun recordVideo(view: View) {
