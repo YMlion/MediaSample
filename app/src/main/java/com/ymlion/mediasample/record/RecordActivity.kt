@@ -129,8 +129,7 @@ class RecordActivity : Activity() {
                 val spsBytes = ByteArray(sps!!.limit())
                 sps.get(spsBytes)
                 val ppsBytes = ByteArray(pps!!.limit())
-                pps!!.get(ppsBytes)
-                Log.d("TAG", "onOutputFormatChanged: sps : "
+                pps.get(ppsBytes)/*Log.d("TAG", "onOutputFormatChanged: sps : "
                         + spsBytes.size
                         + "; pps : "
                         + ppsBytes.size)
@@ -145,23 +144,30 @@ class RecordActivity : Activity() {
                 }
                 Log.e("TAG", builder.toString())
                 out?.write(spsBytes)
-                out?.write(ppsBytes)
+                out?.write(ppsBytes)*/
+                thread {
+                    try {
+                        rtmp.configureAVC(spsBytes, ppsBytes)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
             }
 
             override fun onAudioFormatChanged(format: MediaFormat?) {
             }
 
             override fun onVideoFrame(frame: ByteArray?, time: Long) {
-                Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")/*try {
+                Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
+                try {
                     rtmp.sendVideo(frame, (time / 1000).toInt())
                 } catch (e: Exception) {
                     e.printStackTrace()
-                }*/
-                try {
+                }/*try {
                     out?.write(frame)
                 } catch (e: Exception) {
                     e.printStackTrace()
-                }
+                }*/
             }
 
             override fun onAudioFrame(frame: ByteArray?, time: Long) {
@@ -172,9 +178,7 @@ class RecordActivity : Activity() {
 
     override fun onStop() {
         super.onStop()
-        if (rm != null) {
-            rm.close()
-        }
+        rm.close()
     }
 
     fun stopRecord(view: View) {

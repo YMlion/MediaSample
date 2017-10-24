@@ -349,7 +349,7 @@ public class RecordManager {
                             if (info.presentationTimeUs > 0) {
                                 info.presentationTimeUs -= startTime;
                                 ByteBuffer buffer = videoEncoder.getOutputBuffer(index);
-                                muxer.writeSampleData(videoTrack, buffer, info);
+                                //muxer.writeSampleData(videoTrack, buffer, info);
                                 if (recordListener != null) {
                                     byte[] bytes = new byte[info.size];
                                     buffer.get(bytes);
