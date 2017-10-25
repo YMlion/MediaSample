@@ -36,14 +36,13 @@ public class Rtmp {
             socket = new Socket();
         }
         SocketAddress address = new InetSocketAddress(rtmpHost, 1935);
-        socket.connect(address, 6000);
-        socket.setKeepAlive(true);
+        socket.connect(address, 3000);
         inputStream = new BufferedInputStream(socket.getInputStream());
         outputStream = new BufferedOutputStream(socket.getOutputStream());
         HandShake handShake = new HandShake(outputStream, inputStream);
         handShake.handShake();
         System.out.println("shake hand done.");
-
+        connected = true;
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
@@ -65,14 +64,27 @@ public class Rtmp {
         command.publish(streamName);
         command.sendMetaData();
 
-        connected = true;
         return true;
     }
 
+    private final Object readX = new Object();
+
     private void handleReceivedData() throws IOException {
-        while (true) {
-            ChunkReader reader = new ChunkReader();
-            boolean b = reader.readChunk(inputStream);
+        while (connected) {
+            //ChunkReader reader = new ChunkReader();
+            //boolean b = reader.readChunk(inputStream);
+            byte[] bytes = new byte[CHUNK_SIZE];
+            int r = inputStream.read(bytes);
+            System.out.println("read size is " + r);
+            if (r < 0) {
+                synchronized (readX) {
+                    try {
+                        readX.wait(500);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
         }
     }
 
@@ -90,11 +102,9 @@ public class Rtmp {
 
     /**
      * 写入sps和pps
-     *
-     * @throws IOException
      */
-    public synchronized void configureAVC(byte[] spsData, byte[] ppsData) throws IOException {
-        System.out.println("write sps and pps");
+    public synchronized byte[] configureAVC(byte[] spsData, byte[] ppsData) {
+        System.out.println("write sps and pps " + spsData.length + "; " + ppsData.length);
         byte[] avc = new byte[13 + spsData.length + 3 + ppsData.length];
         avc[0] = 0x17; // 1 : key frame, 7 : avc
         avc[1] = 0;// avc sequence header
@@ -111,7 +121,8 @@ public class Rtmp {
         avc[l] = 1;
         ByteUtil.writeInt(2, ppsData.length, avc, l + 1);
         System.arraycopy(ppsData, 0, avc, l + 3, ppsData.length);
-        RtmpHeader header = new RtmpHeader();
+        return avc;
+        /*RtmpHeader header = new RtmpHeader();
         header.fmt = 0;
         header.CSID = 4;
         header.timestamp = 0;
@@ -120,7 +131,7 @@ public class Rtmp {
         header.msgSID = 1;
         header.write(outputStream);
         outputStream.write(avc);
-        outputStream.flush();
+        outputStream.flush();*/
     }
 
     /**
@@ -168,8 +179,8 @@ public class Rtmp {
                 System.err.println("size : " + left + "; " + wb + "; " + i + "; " + part);
                 wb += CHUNK_SIZE;
             }
-            outputStream.flush();
         }
+        outputStream.flush();
     }
 
     private byte[] encapsulateFrame(byte[] frame) {
@@ -186,16 +197,25 @@ public class Rtmp {
         byte naluType = (byte) (frame[s] & 0x1f);
         byte[] data = null;
         switch (naluType) {
+            case 7:// sps
+                System.out.println("sps start is " + s);
+                int ppsIndex = findNextNALU(s, frame);
+                byte[] sps = new byte[ppsIndex - s - s];
+                System.arraycopy(frame, s, sps, 0, sps.length);
+                byte[] pps = new byte[frame.length - ppsIndex];
+                System.arraycopy(frame, ppsIndex, pps, 0, pps.length);
+                data = configureAVC(sps, pps);
+                break;
             case 6:// SEI
                 int s1 = findNextNALU(s, frame);// 下一个NALU的位置
-                data = new byte[13 - s + frame.length];
+                data = new byte[13 - s - s + frame.length];
                 data[0] = 0x17;
                 data[1] = 1; // avc sequence nalu
                 ByteUtil.writeInt(3, 0, data, 2);
-                ByteUtil.writeInt(4, s1 - s, data, 5);
-                System.arraycopy(frame, s, data, 9, s1 - s);
-                ByteUtil.writeInt(4, frame.length - s1, data, s1 - s + 9);
-                System.arraycopy(frame, s1, data, s1 - s + 13, frame.length - s1);
+                ByteUtil.writeInt(4, s1 - s - s, data, 5);
+                System.arraycopy(frame, s, data, 9, s1 - s - s);
+                ByteUtil.writeInt(4, frame.length - s1, data, s1 - s - s + 9);
+                System.arraycopy(frame, s1, data, s1 - s - s + 13, frame.length - s1);
                 break;
             case 5:// I frame
                 data = new byte[frame.length - s + 9];

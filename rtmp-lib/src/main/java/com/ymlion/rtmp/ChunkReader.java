@@ -13,6 +13,7 @@ public class ChunkReader {
         RtmpHeader header = new RtmpHeader();
         int r = header.read(in);
         if (r <= 0) {
+            System.err.println("read error " + r);
             return false;
         }
 

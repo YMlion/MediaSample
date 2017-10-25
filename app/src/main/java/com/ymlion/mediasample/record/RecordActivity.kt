@@ -16,16 +16,15 @@ import com.ymlion.mediasample.record.RecordManager.RecordListener
 import com.ymlion.rtmp.Rtmp
 import kotlinx.android.synthetic.main.activity_record.record_seconds_tv
 import kotlinx.android.synthetic.main.activity_record.textureView
-import java.io.BufferedOutputStream
-import java.io.FileOutputStream
-import java.io.OutputStream
 import kotlin.concurrent.thread
 
 class RecordActivity : Activity() {
 
     private lateinit var rm: RecordManager
     private lateinit var timer: CountDownTimer
-    private var out: OutputStream? = null
+    //    private var out: OutputStream? = null
+    private val socketObject = Object()
+    private val frameMap = FrameMap()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +33,18 @@ class RecordActivity : Activity() {
         thread {
             rtmpConnect()
             while (!close) {
+                if (!frameMap.isEmpty) {
+                    rtmp.sendVideo(frameMap.frame, frameMap.time.toInt())
+                } else {
+                    synchronized(socketObject, {
+                        try {
+                            socketObject.wait()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            close = true
+                        }
+                    })
+                }
             }
             rtmp.close()
         }
@@ -41,7 +52,8 @@ class RecordActivity : Activity() {
 
     private lateinit var rtmp: Rtmp
 
-    private fun rtmpConnect() { //        rtmp = Rtmp("10.32.10.219", "test", "live")
+    private fun rtmpConnect() {
+        //        rtmp = Rtmp("10.32.10.219", "test", "live")
         rtmp = Rtmp("23.106.136.168", "test", "live")
         try {
             rtmp.connect()
@@ -114,43 +126,32 @@ class RecordActivity : Activity() {
     }
 
     private fun openCamera(width: Int, height: Int) {
-        out = BufferedOutputStream(FileOutputStream(
-                externalCacheDir.absolutePath + "/" + System.currentTimeMillis() + ".h264"))
+//        out = BufferedOutputStream(FileOutputStream(
+//                externalCacheDir.absolutePath + "/" + System.currentTimeMillis() + ".h264"))
         rm = RecordManager(this, textureView.surfaceTexture)
-        Log.d("MAIN", "openCamera: texture view size : "
-                + textureView.width
-                + " ; "
-                + textureView.height)
+        Log.d("MAIN",
+                "openCamera: texture view size : " + textureView.width + " ; " + textureView.height)
         rm.open(width, height)
         rm.setRecordListener(object : RecordListener {
             override fun onVideoFormatChanged(format: MediaFormat?) {
                 val sps = format?.getByteBuffer("csd-0")
                 val pps = format?.getByteBuffer("csd-1")
-                val spsBytes = ByteArray(sps!!.limit())
-                sps.get(spsBytes)
-                val ppsBytes = ByteArray(pps!!.limit())
-                pps.get(ppsBytes)/*Log.d("TAG", "onOutputFormatChanged: sps : "
-                        + spsBytes.size
-                        + "; pps : "
-                        + ppsBytes.size)
-                var builder = StringBuilder()
-                for (spsByte in spsBytes) {
-                    builder.append(spsByte.toInt()).append(' ')
+                val sl = sps!!.limit()
+                val pl = pps!!.limit()
+                val data = ByteArray(sl + pl)
+                sps.get(data, 0, sl)
+                pps.get(data, sl, pl)
+                data.forEach {
+                    print("$it ")
                 }
-                Log.e("TAG", builder.toString())
-                builder = StringBuilder()
-                for (ppsByte in ppsBytes) {
-                    builder.append(ppsByte.toInt()).append(' ')
-                }
-                Log.e("TAG", builder.toString())
-                out?.write(spsBytes)
-                out?.write(ppsBytes)*/
-                thread {
-                    try {
-                        rtmp.configureAVC(spsBytes, ppsBytes)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+                println()
+//                rtmp.sendVideo(data, 0)
+                frameMap.put(data, 0)
+                try {
+                    synchronized(socketObject, {
+                        socketObject.notify()
+                    })
+                } catch (e: Exception) {
                 }
             }
 
@@ -159,15 +160,18 @@ class RecordActivity : Activity() {
 
             override fun onVideoFrame(frame: ByteArray?, time: Long) {
                 Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
-                try {
+                /*try {
                     rtmp.sendVideo(frame, (time / 1000).toInt())
                 } catch (e: Exception) {
                     e.printStackTrace()
-                }/*try {
-                    out?.write(frame)
-                } catch (e: Exception) {
-                    e.printStackTrace()
                 }*/
+                frameMap.put(frame, time / 1000)
+                try {
+                    synchronized(socketObject, {
+                        socketObject.notify()
+                    })
+                } catch (e: Exception) {
+                }
             }
 
             override fun onAudioFrame(frame: ByteArray?, time: Long) {
@@ -185,8 +189,6 @@ class RecordActivity : Activity() {
         rm.stopRecord()
         timer.cancel()
         record_seconds_tv.visibility = View.GONE
-        out?.flush()
-        out?.close()
     }
 
     fun recordVideo(view: View) {

@@ -33,6 +33,8 @@ public class Command {
         CommandObject object = new CommandObject();
         object.put("app", app);
         object.put("type", "nonprivate");
+        object.put("flashVer", "FMLE/3.0 (compatible; FMsc/1.0)");
+        object.put("swfUrl", tcUrl);
         object.put("tcUrl", tcUrl);
         RtmpHeader header = new RtmpHeader();
         header.fmt = 0;
@@ -55,7 +57,7 @@ public class Command {
 
     public void publish(String streamName) throws IOException {
         List<String> list = new ArrayList<>();
-        list.add("live");
+        list.add(streamName);
         list.add("live");
         execute("publish", 6.0, list);
     }
@@ -112,12 +114,14 @@ public class Command {
         RString name2 = new RString("onMetaData", false);
         CommandObject object = new RArray();
         object.put("duration", 0);
-        object.put("width", 1920);
-        object.put("height", 1080);
+        object.put("width", 640);
+        object.put("height", 360);
         object.put("videodatarate", 0);
-        object.put("framerate", 30);
+        //object.put("framerate", 30);
+        object.put("framerate", 0);
         object.put("videocodecid", 7);
-        object.put("audiodatarate", 128);
+        object.put("audiodatarate", 0);
+        //object.put("audiodatarate", 128);
         object.put("audiosamplerate", 48000);
         object.put("audiosamplesize", 16);
         object.put("audiochannels", 2);
@@ -135,7 +139,7 @@ public class Command {
         int totalSize = name.getSize() + name2.getSize() + object.getByteSize();
         header.msgLength = totalSize;
         header.write(out);
-        // Ä¬ÈÏÊÇ128Ê±£¬ĞèÒª·Ö¸îmsgÎª¼¸¸öchunk
+        // é»˜è®¤æ˜¯128æ—¶ï¼Œéœ€è¦åˆ†å‰²msgä¸ºå‡ ä¸ªchunk
         /*int part = totalSize / 128;
         int p = 128 - name.getSize() - name2.getSize();
         byte[] data = new byte[129];

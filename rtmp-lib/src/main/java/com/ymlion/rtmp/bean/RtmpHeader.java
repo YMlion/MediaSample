@@ -14,45 +14,45 @@ import static com.ymlion.rtmp.util.ByteUtil.writeInt;
 public class RtmpHeader {
 
     /**
-     * Ğ­Òé¿ØÖÆÏûÏ¢£ºset chunk size, default is 128 bytes, 4 bytes, 1st bit is 0, 31 bits is chunk size
+     * åè®®æ§åˆ¶æ¶ˆæ¯ï¼šset chunk size, default is 128 bytes, 4 bytes, 1st bit is 0, 31 bits is chunk size
      * <p>
-     * Message Stream ID±ØĞëÎª0£¨´ú±í¿ØÖÆÁ÷ĞÅÏ¢£©£¬CSID±ØĞëÎª2
+     * Message Stream IDå¿…é¡»ä¸º0ï¼ˆä»£è¡¨æ§åˆ¶æµä¿¡æ¯ï¼‰ï¼ŒCSIDå¿…é¡»ä¸º2
      */
     public static final int MSG_TYPE_SET_CHUNK_SIZE = 0x1;
     /**
-     * Ğ­Òé¿ØÖÆÏûÏ¢£ºabort the message that have same CSID, 4 bytes--CSID
+     * åè®®æ§åˆ¶æ¶ˆæ¯ï¼šabort the message that have same CSID, 4 bytes--CSID
      * <p>
-     * Message Stream ID±ØĞëÎª0£¨´ú±í¿ØÖÆÁ÷ĞÅÏ¢£©£¬CSID±ØĞëÎª2
+     * Message Stream IDå¿…é¡»ä¸º0ï¼ˆä»£è¡¨æ§åˆ¶æµä¿¡æ¯ï¼‰ï¼ŒCSIDå¿…é¡»ä¸º2
      */
     public static final int MSG_TYPE_ABORT_MESSAGE = 0x2;
     /**
-     * Ğ­Òé¿ØÖÆÏûÏ¢£ºset window size, the max size bytes to send before response, 4 bytes
+     * åè®®æ§åˆ¶æ¶ˆæ¯ï¼šset window size, the max size bytes to send before response, 4 bytes
      * <p>
-     * Message Stream ID±ØĞëÎª0£¨´ú±í¿ØÖÆÁ÷ĞÅÏ¢£©£¬CSID±ØĞëÎª2
+     * Message Stream IDå¿…é¡»ä¸º0ï¼ˆä»£è¡¨æ§åˆ¶æµä¿¡æ¯ï¼‰ï¼ŒCSIDå¿…é¡»ä¸º2
      */
     public static final int MSG_TYPE_ACKNOWLEDGEMENT = 0x3;
     /**
-     * °üº¬ÓÃ»§¿ØÖÆÊÂ¼ş£¬ÀıÈç¿ªÊ¼´«Êä£¬·¢ËÍÊ±chunkÍ·²¿ÖĞµÄmsgSID = 1, CSID = 2, msgType = 4
+     * åŒ…å«ç”¨æˆ·æ§åˆ¶äº‹ä»¶ï¼Œä¾‹å¦‚å¼€å§‹ä¼ è¾“ï¼Œå‘é€æ—¶chunkå¤´éƒ¨ä¸­çš„msgSID = 1, CSID = 2, msgType = 4
      */
     public static final int MSG_TYPE_USER_CONTROL = 0x4;
     /**
-     * Ğ­Òé¿ØÖÆÏûÏ¢£º·¢ËÍ¶ËÔÚ½ÓÊÕµ½½ÓÊÜ¶Ë·µ»ØµÄÁ½¸öACK¼ä×î¶à¿ÉÒÔ·¢ËÍµÄ×Ö½ÚÊı, 4 bytes
+     * åè®®æ§åˆ¶æ¶ˆæ¯ï¼šå‘é€ç«¯åœ¨æ¥æ”¶åˆ°æ¥å—ç«¯è¿”å›çš„ä¸¤ä¸ªACKé—´æœ€å¤šå¯ä»¥å‘é€çš„å­—èŠ‚æ•°, 4 bytes
      * <p>
-     * Message Stream ID±ØĞëÎª0£¨´ú±í¿ØÖÆÁ÷ĞÅÏ¢£©£¬CSID±ØĞëÎª2
+     * Message Stream IDå¿…é¡»ä¸º0ï¼ˆä»£è¡¨æ§åˆ¶æµä¿¡æ¯ï¼‰ï¼ŒCSIDå¿…é¡»ä¸º2
      */
     public static final int MSG_TYPE_WINDOW_ACK_SIZE = 0x5;
     /**
-     * Ğ­Òé¿ØÖÆÏûÏ¢£ºÏŞÖÆ¶Ô¶ËµÄÊä³ö´ø¿í, 5 bytes: size is 4 bytes, 1 byte is limit type
+     * åè®®æ§åˆ¶æ¶ˆæ¯ï¼šé™åˆ¶å¯¹ç«¯çš„è¾“å‡ºå¸¦å®½, 5 bytes: size is 4 bytes, 1 byte is limit type
      * <p>
-     * Message Stream ID±ØĞëÎª0£¨´ú±í¿ØÖÆÁ÷ĞÅÏ¢£©£¬CSID±ØĞëÎª2
+     * Message Stream IDå¿…é¡»ä¸º0ï¼ˆä»£è¡¨æ§åˆ¶æµä¿¡æ¯ï¼‰ï¼ŒCSIDå¿…é¡»ä¸º2
      * <p>
-     * 1. Hard(Limit Type£½0):½ÓÊÜ¶ËÓ¦¸Ã½«Window Ack SizeÉèÖÃÎªÏûÏ¢ÖĞµÄÖµ
+     * 1. Hard(Limit Typeï¼0):æ¥å—ç«¯åº”è¯¥å°†Window Ack Sizeè®¾ç½®ä¸ºæ¶ˆæ¯ä¸­çš„å€¼
      * <p>
-     * 2. Soft(Limit Type=1):½ÓÊÜ¶Ë¿ÉÒÔ½²Window Ack SizeÉèÎªÏûÏ¢ÖĞµÄÖµ£¬Ò²¿ÉÒÔ±£´æÔ­À´µÄÖµ£¨Ç°ÌáÊÇÔ­À´µÄSizeĞ¡Óë¸Ã¿ØÖÆÏûÏ¢ÖĞµÄWindow Ack
-     * Size£©
+     * 2. Soft(Limit Type=1):æ¥å—ç«¯å¯ä»¥è®²Window Ack Sizeè®¾ä¸ºæ¶ˆæ¯ä¸­çš„å€¼ï¼Œä¹Ÿå¯ä»¥ä¿å­˜åŸæ¥çš„å€¼ï¼ˆå‰ææ˜¯åŸæ¥çš„Sizeå°ä¸è¯¥æ§åˆ¶æ¶ˆæ¯ä¸­çš„Window Ack
+     * Sizeï¼‰
      * <p>
-     * 3. Dynamic(Limit Type=2):Èç¹ûÉÏ´ÎµÄSet Peer BandwidthÏûÏ¢ÖĞµÄLimit TypeÎª0£¬±¾´ÎÒ²°´Hard´¦Àí£¬·ñÔòºöÂÔ±¾ÏûÏ¢£¬²»È¥ÉèÖÃWindow
-     * Ack Size¡£
+     * 3. Dynamic(Limit Type=2):å¦‚æœä¸Šæ¬¡çš„Set Peer Bandwidthæ¶ˆæ¯ä¸­çš„Limit Typeä¸º0ï¼Œæœ¬æ¬¡ä¹ŸæŒ‰Hardå¤„ç†ï¼Œå¦åˆ™å¿½ç•¥æœ¬æ¶ˆæ¯ï¼Œä¸å»è®¾ç½®Window
+     * Ack Sizeã€‚
      */
     public static final int MSG_TYPE_SET_PEER_BW = 0x6;
     /**
@@ -179,7 +179,7 @@ public class RtmpHeader {
                 msgLength = 128;
                 break;
         }
-        if (r <= 0) {
+        if (r < 0) {
             return -1;
         }
 
