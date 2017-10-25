@@ -42,8 +42,12 @@ import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
+
 import com.ymlion.mediasample.util.CodecCallback;
 import com.ymlion.mediasample.util.ImageUtil;
+
+import org.jetbrains.annotations.Nullable;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -52,7 +56,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import org.jetbrains.annotations.Nullable;
 
 import static android.hardware.camera2.CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE;
 import static android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO;
@@ -289,6 +292,11 @@ public class RecordManager {
                         if (index >= 0 && videoTrack >= 0) {
                             ByteBuffer buffer = audioEncoder.getOutputBuffer(index);
                             muxer.writeSampleData(audioTrack, buffer, info);
+                            if (recordListener != null) {
+                                byte[] bytes = new byte[info.size];
+                                buffer.get(bytes);
+                                recordListener.onAudioFrame(bytes, info.presentationTimeUs);
+                            }
                         }
                         audioEncoder.releaseOutputBuffer(index, false);
                         return true;

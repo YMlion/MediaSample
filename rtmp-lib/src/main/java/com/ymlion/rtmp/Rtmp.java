@@ -262,4 +262,8 @@ public class Rtmp {
         }
         return off;
     }
+
+    public void sendAudio(Frame frame) {
+
+    }
 }

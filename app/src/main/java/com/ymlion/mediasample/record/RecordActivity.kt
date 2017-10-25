@@ -15,8 +15,7 @@ import com.ymlion.mediasample.R.layout
 import com.ymlion.mediasample.record.RecordManager.RecordListener
 import com.ymlion.rtmp.Rtmp
 import com.ymlion.rtmp.bean.Frame
-import kotlinx.android.synthetic.main.activity_record.record_seconds_tv
-import kotlinx.android.synthetic.main.activity_record.textureView
+import kotlinx.android.synthetic.main.activity_record.*
 import kotlin.concurrent.thread
 
 class RecordActivity : Activity() {
@@ -35,7 +34,12 @@ class RecordActivity : Activity() {
             rtmpConnect()
             while (!close) {
                 if (frameArray.isNotEmpty()) {
-                    rtmp.sendVideo(frameArray.removeAt(0))
+                    val frame = frameArray.removeAt(0)
+                    if (frame.isVideo) {
+                        rtmp.sendVideo(frame)
+                    } else {
+                        rtmp.sendAudio(frame)
+                    }
                 } else {
                     synchronized(socketObject, {
                         try {
@@ -54,8 +58,8 @@ class RecordActivity : Activity() {
     private lateinit var rtmp: Rtmp
 
     private fun rtmpConnect() {
-        //        rtmp = Rtmp("10.32.10.219", "test", "live")
-        rtmp = Rtmp("23.106.136.168", "test", "live")
+        rtmp = Rtmp("192.168.2.161", "test", "live")
+//        rtmp = Rtmp("23.106.136.168", "test", "live")
         try {
             rtmp.connect()
         } catch (e: Exception) {
@@ -85,7 +89,7 @@ class RecordActivity : Activity() {
     private fun initView() {
         textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int,
-                    height: Int) {
+                                                   height: Int) {
                 Log.d("MAIN", "onSurfaceTextureAvailable: $width; $height")
                 if (Build.VERSION.SDK_INT >= 23) {
                     if (checkSelfPermission(
@@ -98,7 +102,7 @@ class RecordActivity : Activity() {
             }
 
             override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int,
-                    height: Int) {
+                                                     height: Int) {
                 Log.e("MAIN", "onSurfaceTextureSizeChanged: $width; $height")
             }
 
@@ -113,7 +117,7 @@ class RecordActivity : Activity() {
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
-            grantResults: IntArray) {
+                                            grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 0) {
             for (grantResult in grantResults) {
@@ -149,6 +153,13 @@ class RecordActivity : Activity() {
             }
 
             override fun onAudioFormatChanged(format: MediaFormat?) {
+                val sps = format?.getByteBuffer("csd-0")
+                val data = ByteArray(sps!!.limit())
+                sps.get(data)
+                frameArray.add(Frame(false, data, 0))
+                synchronized(socketObject, {
+                    socketObject.notify()
+                })
             }
 
             override fun onVideoFrame(frame: ByteArray?, time: Long) {
@@ -160,6 +171,11 @@ class RecordActivity : Activity() {
             }
 
             override fun onAudioFrame(frame: ByteArray?, time: Long) {
+                Log.d("TAG", "onAudioFrame size is ${frame?.size} + $time")
+                frameArray.add(Frame(false, frame, time / 1000))
+                synchronized(socketObject, {
+                    socketObject.notify()
+                })
             }
 
         })
