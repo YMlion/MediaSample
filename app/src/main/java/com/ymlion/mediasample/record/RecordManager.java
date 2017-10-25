@@ -304,7 +304,7 @@ public class RecordManager {
         int frameRate = 30;           //帧率，30帧
         int frameInterval = 1;        //关键帧一秒一关键帧
 
-        MediaFormat format = MediaFormat.createVideoFormat(mime, 640, 480);
+        MediaFormat format = MediaFormat.createVideoFormat(mime, 720, 480);
         format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
         format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, frameInterval);

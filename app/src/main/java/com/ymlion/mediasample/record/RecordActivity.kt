@@ -141,18 +141,10 @@ class RecordActivity : Activity() {
                 val data = ByteArray(sl + pl)
                 sps.get(data, 0, sl)
                 pps.get(data, sl, pl)
-                data.forEach {
-                    print("$it ")
-                }
-                println()
-//                rtmp.sendVideo(data, 0)
                 frameMap.put(data, 0)
-                try {
-                    synchronized(socketObject, {
-                        socketObject.notify()
-                    })
-                } catch (e: Exception) {
-                }
+                synchronized(socketObject, {
+                    socketObject.notify()
+                })
             }
 
             override fun onAudioFormatChanged(format: MediaFormat?) {
@@ -160,18 +152,10 @@ class RecordActivity : Activity() {
 
             override fun onVideoFrame(frame: ByteArray?, time: Long) {
                 Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
-                /*try {
-                    rtmp.sendVideo(frame, (time / 1000).toInt())
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }*/
                 frameMap.put(frame, time / 1000)
-                try {
-                    synchronized(socketObject, {
-                        socketObject.notify()
-                    })
-                } catch (e: Exception) {
-                }
+                synchronized(socketObject, {
+                    socketObject.notify()
+                })
             }
 
             override fun onAudioFrame(frame: ByteArray?, time: Long) {
@@ -198,9 +182,7 @@ class RecordActivity : Activity() {
                 val time = (60000 - millisUntilFinished) / 1000f
                 record_seconds_tv.text = String.format("%.1fs", time)
             }
-
             override fun onFinish() {
-
             }
         }
         timer.start()

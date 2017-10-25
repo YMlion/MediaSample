@@ -28,7 +28,6 @@ public class HandShake {
         readS1();
         writeC2();
         readS2();
-        outputStream.flush();
     }
 
     private void writeC0() throws IOException {

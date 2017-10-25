@@ -114,8 +114,8 @@ public class Command {
         RString name2 = new RString("onMetaData", false);
         CommandObject object = new RArray();
         object.put("duration", 0);
-        object.put("width", 640);
-        object.put("height", 360);
+        object.put("width", 720);
+        object.put("height", 480);
         object.put("videodatarate", 0);
         //object.put("framerate", 30);
         object.put("framerate", 0);

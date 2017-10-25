@@ -18,7 +18,7 @@ public class Rtmp {
     private boolean connected = false;
     private BufferedInputStream inputStream;
     private BufferedOutputStream outputStream;
-    private static final int CHUNK_SIZE = 2048;
+    private static final int CHUNK_SIZE = 8192;
 
     public Rtmp(String rtmpHost, String app, String streamName) {
         this.rtmpHost = rtmpHost;
@@ -122,16 +122,6 @@ public class Rtmp {
         ByteUtil.writeInt(2, ppsData.length, avc, l + 1);
         System.arraycopy(ppsData, 0, avc, l + 3, ppsData.length);
         return avc;
-        /*RtmpHeader header = new RtmpHeader();
-        header.fmt = 0;
-        header.CSID = 4;
-        header.timestamp = 0;
-        header.msgLength = avc.length;
-        header.msgType = RtmpHeader.MSG_TYPE_VIDEO;
-        header.msgSID = 1;
-        header.write(outputStream);
-        outputStream.write(avc);
-        outputStream.flush();*/
     }
 
     /**
@@ -176,13 +166,26 @@ public class Rtmp {
                 int left = data.length - wb;
                 int size = left > CHUNK_SIZE ? CHUNK_SIZE : left;
                 outputStream.write(data, wb, size);
-                System.err.println("size : " + left + "; " + wb + "; " + i + "; " + part);
+                System.out.println("size : " + left + "; " + wb + "; " + i + "; " + part);
                 wb += CHUNK_SIZE;
             }
         }
         outputStream.flush();
     }
 
+    /**
+     * sps和pps是第一个video tag，且只发送一次
+     * <p>
+     * 后面的每一个video tag，有两种类型
+     * <p>
+     * 1. 关键帧，该帧的数据一般是“分隔符 + SEI + I帧”，分隔符和SEI不是必须的，但目前未遇到有分隔符的
+     * </p>
+     * <p>
+     * 2.非关键帧，即P帧
+     * </p>
+     * 整个数据就是 122222....122222...这样循环，一个I帧后面很多P帧
+     * </p>
+     */
     private byte[] encapsulateFrame(byte[] frame) {
         if (frame[0] != 0) {
             return frame;
@@ -197,8 +200,7 @@ public class Rtmp {
         byte naluType = (byte) (frame[s] & 0x1f);
         byte[] data = null;
         switch (naluType) {
-            case 7:// sps
-                System.out.println("sps start is " + s);
+            case 7:// sps，和pps是一起的
                 int ppsIndex = findNextNALU(s, frame);
                 byte[] sps = new byte[ppsIndex - s - s];
                 System.arraycopy(frame, s, sps, 0, sps.length);
@@ -206,7 +208,7 @@ public class Rtmp {
                 System.arraycopy(frame, ppsIndex, pps, 0, pps.length);
                 data = configureAVC(sps, pps);
                 break;
-            case 6:// SEI
+            case 6:// SEI，之后肯定有一个I帧
                 int s1 = findNextNALU(s, frame);// 下一个NALU的位置
                 data = new byte[13 - s - s + frame.length];
                 data[0] = 0x17;
