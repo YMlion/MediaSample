@@ -249,6 +249,9 @@ public class RecordManager {
                 }
                 audioTrack = muxer.addTrack(format);
                 Log.d(TAG, "audio track is " + audioTrack);
+                if (recordListener != null) {
+                    recordListener.onAudioFormatChanged(format);
+                }
                 if (videoTrack >= 0) {
                     muxer.start();
                 }
