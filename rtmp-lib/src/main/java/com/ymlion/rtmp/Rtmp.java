@@ -1,5 +1,6 @@
 package com.ymlion.rtmp;
 
+import com.ymlion.rtmp.bean.Frame;
 import com.ymlion.rtmp.bean.RtmpHeader;
 import com.ymlion.rtmp.util.ByteUtil;
 import java.io.BufferedInputStream;
@@ -138,15 +139,15 @@ public class Rtmp {
      *
      * @throws IOException
      */
-    public synchronized void sendVideo(byte[] frame, int time) throws IOException {
-        byte[] data = encapsulateFrame(frame);
+    public synchronized void sendVideo(Frame frame) throws IOException {
+        byte[] data = encapsulateFrame(frame.getData());
         if (data == null) {
             throw new IOException("帧数据分析失败");
         }
         RtmpHeader header = new RtmpHeader();
         header.fmt = 0;
         header.CSID = 4;
-        header.timestamp = time;
+        header.timestamp = (int) frame.getTime();
         header.msgLength = data.length;
         header.msgType = RtmpHeader.MSG_TYPE_VIDEO;
         header.msgSID = 1;

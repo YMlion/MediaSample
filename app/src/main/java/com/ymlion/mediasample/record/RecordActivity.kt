@@ -14,6 +14,7 @@ import android.view.View
 import com.ymlion.mediasample.R.layout
 import com.ymlion.mediasample.record.RecordManager.RecordListener
 import com.ymlion.rtmp.Rtmp
+import com.ymlion.rtmp.bean.Frame
 import kotlinx.android.synthetic.main.activity_record.record_seconds_tv
 import kotlinx.android.synthetic.main.activity_record.textureView
 import kotlin.concurrent.thread
@@ -24,7 +25,7 @@ class RecordActivity : Activity() {
     private lateinit var timer: CountDownTimer
     //    private var out: OutputStream? = null
     private val socketObject = Object()
-    private val frameMap = FrameMap()
+    private val frameArray = ArrayList<Frame>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,8 +34,8 @@ class RecordActivity : Activity() {
         thread {
             rtmpConnect()
             while (!close) {
-                if (!frameMap.isEmpty) {
-                    rtmp.sendVideo(frameMap.frame, frameMap.time.toInt())
+                if (frameArray.isNotEmpty()) {
+                    rtmp.sendVideo(frameArray.removeAt(0))
                 } else {
                     synchronized(socketObject, {
                         try {
@@ -141,7 +142,7 @@ class RecordActivity : Activity() {
                 val data = ByteArray(sl + pl)
                 sps.get(data, 0, sl)
                 pps.get(data, sl, pl)
-                frameMap.put(data, 0)
+                frameArray.add(Frame(true, data, 0))
                 synchronized(socketObject, {
                     socketObject.notify()
                 })
@@ -152,7 +153,7 @@ class RecordActivity : Activity() {
 
             override fun onVideoFrame(frame: ByteArray?, time: Long) {
                 Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
-                frameMap.put(frame, time / 1000)
+                frameArray.add(Frame(true, frame, time / 1000))
                 synchronized(socketObject, {
                     socketObject.notify()
                 })
@@ -182,6 +183,7 @@ class RecordActivity : Activity() {
                 val time = (60000 - millisUntilFinished) / 1000f
                 record_seconds_tv.text = String.format("%.1fs", time)
             }
+
             override fun onFinish() {
             }
         }
