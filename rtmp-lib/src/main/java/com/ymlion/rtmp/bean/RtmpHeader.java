@@ -85,7 +85,7 @@ public class RtmpHeader {
      */
     public int fmt;
     /**
-     * chunk stream id, basic head size - 2 bit, little-endian
+     * chunk stream id, basic head size - 6 bit, little-endian
      */
     public int CSID;
     /**
@@ -151,21 +151,19 @@ public class RtmpHeader {
     }
 
     public int read(InputStream in) throws IOException {
-        int b1 = in.read();
+        int b1 = in.read() & 0xff;
         if (b1 == -1) {
             return -1;
         }
         fmt = b1 >>> 6;
         CSID = b1 & 0x3f;
-        System.out.println("rtmp chunk header fmt is " + fmt + " ; cs id is " + CSID);
         byte[] head = new byte[11];
         int r = 0;
         switch (fmt) {
             case 0:
                 r = in.read(head);
                 msgLength = ByteUtil.bytes2Int(3, head, 3);
-                msgType = head[6];
-                System.out.println("rtmp chunk header type is " + msgType);
+                msgType = head[6] & 0xff;
                 break;
             case 1:
                 r = in.read(head, 0, 7);

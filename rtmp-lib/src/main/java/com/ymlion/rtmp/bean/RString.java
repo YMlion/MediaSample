@@ -1,5 +1,7 @@
 package com.ymlion.rtmp.bean;
 
+import com.ymlion.rtmp.util.ByteUtil;
+
 import static com.ymlion.rtmp.util.ByteUtil.writeInt;
 
 /**
@@ -41,5 +43,13 @@ public class RString extends RObject {
             data[i] = (byte) string.charAt(i - size);
         }
         return data;
+    }
+
+    public static RString read(byte[] chunkBody, boolean isKey) {
+        int length = ByteUtil.bytes2Int(2, chunkBody, isKey ? 0 : 1);
+        byte[] cbs = new byte[length];
+        System.arraycopy(chunkBody, isKey ? 2 : 3, cbs, 0, length);
+        String command = new String(cbs);
+        return new RString(command, isKey);
     }
 }

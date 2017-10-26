@@ -49,10 +49,6 @@ public class Command {
         object.write(out);
         out.flush();
         System.out.println("rtmp connected.");
-        execute("releaseStream", 2.0, streamName);
-        execute("FCPublish", 2.0, streamName);
-        execute("createStream", 2.0, (List<String>) null);
-        execute("_checkbw", 5.0, (List<String>) null);
     }
 
     public void publish(String streamName) throws IOException {
@@ -62,18 +58,14 @@ public class Command {
         execute("publish", 6.0, list);
     }
 
-    private void execute(String command, double number, String string) throws IOException {
+    public void execute(String command, double number, String string) throws IOException {
         List<String> strings = new ArrayList<>();
         strings.add(string);
         execute(command, number, strings);
     }
 
-    private void execute(String command, double number, List<String> strings) throws IOException {
-        try {
-            Thread.sleep(10);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+    public void execute(String command, double number, List<String> strings) throws IOException {
+        System.out.println("execute " + command);
         int total = 0;
         RObject name = new RString(command, false);
         total += name.getSize();

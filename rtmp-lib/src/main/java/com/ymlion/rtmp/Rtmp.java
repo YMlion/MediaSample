@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.util.List;
 
 public class Rtmp {
     private Socket socket;
@@ -20,6 +21,7 @@ public class Rtmp {
     private BufferedInputStream inputStream;
     private BufferedOutputStream outputStream;
     private static final int CHUNK_SIZE = 8192;
+    private final Object writeObj = new Object();
 
     public Rtmp(String rtmpHost, String app, String streamName) {
         this.rtmpHost = rtmpHost;
@@ -53,31 +55,40 @@ public class Rtmp {
                 }
             }
         }).start();
-        try {
-            Thread.sleep(50);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
         Command command = new Command(outputStream);
         command.setChunkSize(CHUNK_SIZE);
         command.connect(appName, tcUrl, streamName);
+        waitRead();
+        command.execute("releaseStream", 2.0, streamName);
+        waitRead();
+        command.execute("FCPublish", 3.0, streamName);
+        waitRead();
+        command.execute("createStream", 4.0, (List<String>) null);
+        command.execute("_checkbw", 5.0, (List<String>) null);
+        waitRead();
         command.publish(streamName);
         command.sendMetaData();
 
         return true;
     }
 
+    private void waitRead() {
+        synchronized (writeObj) {
+            try {
+                writeObj.wait(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     private final Object readX = new Object();
 
     private void handleReceivedData() throws IOException {
         while (connected) {
-            //ChunkReader reader = new ChunkReader();
-            //boolean b = reader.readChunk(inputStream);
-            byte[] bytes = new byte[CHUNK_SIZE];
-            int r = inputStream.read(bytes);
-            System.out.println("read size is " + r);
-            if (r < 0) {
+            ChunkReader reader = new ChunkReader();
+            boolean next = reader.readChunk(inputStream, writeObj);
+            if (!next) {
                 synchronized (readX) {
                     try {
                         readX.wait(500);
@@ -152,6 +163,10 @@ public class Rtmp {
         header.msgType = RtmpHeader.MSG_TYPE_VIDEO;
         header.msgSID = 1;
         header.write(outputStream);
+        writeData(data);
+    }
+
+    private void writeData(byte[] data) throws IOException {
         if (data.length < CHUNK_SIZE) {
             outputStream.write(data);
             return;
@@ -263,7 +278,19 @@ public class Rtmp {
         return off;
     }
 
-    public void sendAudio(Frame frame) {
-
+    public void sendAudio(Frame frame) throws IOException {
+        byte[] data = new byte[frame.getData().length + 2];
+        data[0] = (byte) 0xaf;
+        data[1] = (byte) (frame.getData().length > 2 ? 1 : 0);
+        System.arraycopy(frame.getData(), 0, data, 2, frame.getData().length);
+        RtmpHeader header = new RtmpHeader();
+        header.fmt = 0;
+        header.CSID = 4;
+        header.timestamp = (int) frame.getTime();
+        header.msgLength = data.length;
+        header.msgType = RtmpHeader.MSG_TYPE_AUDIO;
+        header.msgSID = 1;
+        header.write(outputStream);
+        writeData(data);
     }
 }

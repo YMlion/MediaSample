@@ -22,11 +22,19 @@ public class ByteUtil {
     }
 
     public static int bytes2Int(int size, byte[] src, int off) {
-        int d = 0;
-        for (int i = 0; i < size; i++) {
-            d += src[i + off] << (8 * (size - 1 - i));
+        switch (size) {
+            case 1:
+                return src[off] & 0xff;
+            case 2:
+                return ((src[off] & 0xff) << 8) | (src[off + 1] & 0xff);
+            case 3:
+                return ((src[off] & 0xff) << 16) | ((src[off + 1] & 0xff) << 8) | (src[off + 2]
+                        & 0xff);
+            case 4:
+                return ((src[off] & 0xff) << 24) | ((src[off + 1] & 0xff) << 16) | ((src[off + 2]
+                        & 0xff) << 8) | (src[off + 3] & 0xff);
         }
-        return d;
+        return 0;
     }
 
     /**

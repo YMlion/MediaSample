@@ -55,7 +55,7 @@ public class HandShake {
 
     private void readS0() throws IOException {
         System.out.println("shake hand : read S0");
-        int v = inputStream.read();
+        int v = inputStream.read() & 0xff;
         if (v != 3) {
             System.out.println("server rtmp version is " + v);
         }

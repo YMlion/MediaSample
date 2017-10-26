@@ -15,7 +15,8 @@ import com.ymlion.mediasample.R.layout
 import com.ymlion.mediasample.record.RecordManager.RecordListener
 import com.ymlion.rtmp.Rtmp
 import com.ymlion.rtmp.bean.Frame
-import kotlinx.android.synthetic.main.activity_record.*
+import kotlinx.android.synthetic.main.activity_record.record_seconds_tv
+import kotlinx.android.synthetic.main.activity_record.textureView
 import kotlin.concurrent.thread
 
 class RecordActivity : Activity() {
@@ -43,7 +44,7 @@ class RecordActivity : Activity() {
                 } else {
                     synchronized(socketObject, {
                         try {
-                            socketObject.wait()
+                            socketObject.wait(500)
                         } catch (e: Exception) {
                             e.printStackTrace()
                             close = true
@@ -58,8 +59,8 @@ class RecordActivity : Activity() {
     private lateinit var rtmp: Rtmp
 
     private fun rtmpConnect() {
-        rtmp = Rtmp("192.168.2.161", "test", "live")
-//        rtmp = Rtmp("23.106.136.168", "test", "live")
+//        rtmp = Rtmp("192.168.2.161", "test", "live")
+        rtmp = Rtmp("23.106.136.168", "test", "live")
         try {
             rtmp.connect()
         } catch (e: Exception) {
@@ -183,6 +184,7 @@ class RecordActivity : Activity() {
 
     override fun onStop() {
         super.onStop()
+        rm.stopRecord()
         rm.close()
     }
 

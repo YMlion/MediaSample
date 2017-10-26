@@ -42,12 +42,8 @@ import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
-
 import com.ymlion.mediasample.util.CodecCallback;
 import com.ymlion.mediasample.util.ImageUtil;
-
-import org.jetbrains.annotations.Nullable;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -56,6 +52,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import org.jetbrains.annotations.Nullable;
 
 import static android.hardware.camera2.CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE;
 import static android.hardware.camera2.CameraMetadata.CONTROL_MODE_AUTO;
@@ -247,16 +244,17 @@ public class RecordManager {
 
             @Override
             public void onOutputFormatChanged(MediaCodec codec, @Nullable MediaFormat format) {
+                Log.d(TAG, "onOutputFormatChanged: " + format);
                 if (format == null) {
                     format = audioEncoder.getOutputFormat();
                 }
                 audioTrack = muxer.addTrack(format);
                 Log.d(TAG, "audio track is " + audioTrack);
-                if (recordListener != null) {
-                    recordListener.onAudioFormatChanged(format);
-                }
                 if (videoTrack >= 0) {
                     muxer.start();
+                }
+                if (recordListener != null) {
+                    recordListener.onAudioFormatChanged(format);
                 }
             }
         });
@@ -335,11 +333,11 @@ public class RecordManager {
                 }
                 videoTrack = muxer.addTrack(format);
                 Log.d(TAG, " video track is " + videoTrack);
-                if (recordListener != null) {
-                    recordListener.onVideoFormatChanged(format);
-                }
                 if (audioTrack >= 0) {
                     muxer.start();
+                }
+                if (recordListener != null) {
+                    recordListener.onVideoFormatChanged(format);
                 }
             }
         });
@@ -417,6 +415,9 @@ public class RecordManager {
     }
 
     public void stopRecord() {
+        if (mState != STATE_RECORDING) {
+            return;
+        }
         Log.d(TAG, "stopRecord");
         mState = STATE_RECORDED;
         videoEncoder.signalEndOfInputStream();
