@@ -20,7 +20,7 @@ public class Rtmp {
     private boolean connected = false;
     private BufferedInputStream inputStream;
     private BufferedOutputStream outputStream;
-    private static final int CHUNK_SIZE = 8192;
+    private static final int CHUNK_SIZE = 1024;
     private final Object writeObj = new Object();
 
     public Rtmp(String rtmpHost, String app, String streamName) {
