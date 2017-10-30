@@ -2,8 +2,10 @@ package com.ymlion.rtmp.bean;
 
 import com.ymlion.rtmp.util.ByteUtil;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.IllegalFormatFlagsException;
 import java.util.List;
 
 /**
@@ -78,5 +80,14 @@ public class CommandObject {
 
     public void write(OutputStream out) throws IOException {
         out.write(getBytes());
+    }
+
+    public static CommandObject read(InputStream in) throws IOException {
+        int type = in.read();
+        if (type != 3) {
+            throw new IllegalFormatFlagsException(
+                    "this type " + type + "is not object!!! object type is 3");
+        }
+        return null;
     }
 }

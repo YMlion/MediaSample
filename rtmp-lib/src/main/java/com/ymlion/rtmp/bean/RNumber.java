@@ -24,4 +24,8 @@ public class RNumber extends RObject {
 
         return bytes;
     }
+
+    @Override public Double value() {
+        return number;
+    }
 }

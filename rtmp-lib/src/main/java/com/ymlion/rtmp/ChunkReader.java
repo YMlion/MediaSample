@@ -1,5 +1,6 @@
 package com.ymlion.rtmp;
 
+import com.ymlion.rtmp.bean.RString;
 import com.ymlion.rtmp.bean.RtmpHeader;
 import com.ymlion.rtmp.util.ByteUtil;
 import java.io.IOException;
@@ -10,12 +11,18 @@ import java.io.InputStream;
  */
 
 public class ChunkReader {
+    private static int READ_CHUNK_SIZE = 128;
+
     public boolean readChunk(InputStream in, Object writeObj) throws IOException {
         RtmpHeader header = new RtmpHeader();
         int r = header.read(in);
         if (r <= 0) {
             System.err.println("read error " + r);
             return false;
+        }
+
+        if (header.msgLength == -1) {
+            header.msgLength = READ_CHUNK_SIZE;
         }
 
         byte[] chunkBody = new byte[header.msgLength];
@@ -32,7 +39,8 @@ public class ChunkReader {
         String log;
         switch (msgType) {
             case RtmpHeader.MSG_TYPE_SET_CHUNK_SIZE:
-                log = "set chunk size " + ByteUtil.bytes2Int(4, chunkBody, 0);
+                READ_CHUNK_SIZE = ByteUtil.bytes2Int(4, chunkBody, 0);
+                log = "set chunk size " + READ_CHUNK_SIZE;
                 break;
             case RtmpHeader.MSG_TYPE_ABORT_MESSAGE:
                 log = "abort the same CSID message " + ByteUtil.bytes2Int(4, chunkBody, 0);
@@ -49,6 +57,12 @@ public class ChunkReader {
                 break;
             case RtmpHeader.MSG_TYPE_SET_PEER_BW:
                 log = "限制对端的输出带宽 " + ByteUtil.bytes2Int(4, chunkBody, 0);
+                break;
+            case RtmpHeader.MSG_TYPE_DATA:
+                log = "设置数据";
+                RString dataCommad = RString.read(chunkBody, false);
+                if (dataCommad.value().equals("onMetaData")) {
+                }
                 break;
             case RtmpHeader.MSG_TYPE_COMMAND:
                 log = "perform the command ";

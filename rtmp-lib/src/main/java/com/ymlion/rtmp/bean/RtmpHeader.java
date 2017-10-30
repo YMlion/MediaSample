@@ -171,10 +171,10 @@ public class RtmpHeader {
                 break;
             case 2:
                 r = in.read(head, 0, 3);
-                msgLength = 128;
+                msgLength = -1;
                 break;
             default:
-                msgLength = 128;
+                msgLength = -1;
                 break;
         }
         if (r < 0) {

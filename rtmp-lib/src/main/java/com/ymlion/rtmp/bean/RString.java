@@ -52,4 +52,8 @@ public class RString extends RObject {
         String command = new String(cbs);
         return new RString(command, isKey);
     }
+
+    public String value() {
+        return string;
+    }
 }

@@ -19,4 +19,8 @@ public class RBoolean extends RObject {
         data[1] = value;
         return data;
     }
+
+    @Override public Boolean value() {
+        return value == 1;
+    }
 }

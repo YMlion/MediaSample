@@ -12,4 +12,8 @@ public class RNull extends RObject {
     @Override public byte[] getBytes() {
         return new byte[] { 5 };
     }
+
+    @Override public Object value() {
+        return null;
+    }
 }

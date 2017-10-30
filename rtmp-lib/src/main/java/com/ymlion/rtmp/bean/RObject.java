@@ -26,4 +26,6 @@ public abstract class RObject {
     public int getSize() {
         return byteSize;
     }
+
+    public abstract Object value();
 }

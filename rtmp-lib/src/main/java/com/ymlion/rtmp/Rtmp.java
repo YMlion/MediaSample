@@ -11,6 +11,9 @@ import java.net.Socket;
 import java.net.SocketAddress;
 import java.util.List;
 
+/**
+ * 推流
+ */
 public class Rtmp {
     private Socket socket;
     private String rtmpHost;
@@ -59,12 +62,12 @@ public class Rtmp {
         command.setChunkSize(CHUNK_SIZE);
         command.connect(appName, tcUrl, streamName);
         waitRead();
-        command.execute("releaseStream", 2.0, streamName);
+        command.execute(3, "releaseStream", 2.0, streamName);
         waitRead();
-        command.execute("FCPublish", 3.0, streamName);
+        command.execute(3, "FCPublish", 3.0, streamName);
         waitRead();
-        command.execute("createStream", 4.0, (List<String>) null);
-        command.execute("_checkbw", 5.0, (List<String>) null);
+        command.execute(3, "createStream", 4.0, (List<String>) null);
+        command.execute(3, "_checkbw", 5.0, (List<String>) null);
         waitRead();
         command.publish(streamName);
         command.sendMetaData();

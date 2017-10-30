@@ -55,16 +55,17 @@ public class Command {
         List<String> list = new ArrayList<>();
         list.add(streamName);
         list.add("live");
-        execute("publish", 6.0, list);
+        execute(8, "publish", 6.0, list);
     }
 
-    public void execute(String command, double number, String string) throws IOException {
+    public void execute(int CSID, String command, double number, String string) throws IOException {
         List<String> strings = new ArrayList<>();
         strings.add(string);
-        execute(command, number, strings);
+        execute(CSID, command, number, strings);
     }
 
-    public void execute(String command, double number, List<String> strings) throws IOException {
+    public void execute(int CSID, String command, double number, List<String> strings)
+            throws IOException {
         System.out.println("execute " + command);
         int total = 0;
         RObject name = new RString(command, false);
@@ -84,7 +85,7 @@ public class Command {
         }
         RtmpHeader header = new RtmpHeader();
         header.fmt = 1;
-        header.CSID = 3;
+        header.CSID = CSID;
         header.timestamp = 0;
         header.msgType = RtmpHeader.MSG_TYPE_COMMAND;
         header.msgLength = total;
@@ -159,16 +160,31 @@ public class Command {
     }
 
     public void setChunkSize(int size) throws IOException {
+        sendControlMsg(size, RtmpHeader.MSG_TYPE_SET_CHUNK_SIZE);
+    }
+
+    public void setWindowAckSize(int size) throws IOException {
+        sendControlMsg(size, RtmpHeader.MSG_TYPE_WINDOW_ACK_SIZE);
+    }
+
+    private void sendControlMsg(int num, int type) throws IOException {
         RtmpHeader header = new RtmpHeader();
         header.fmt = 0;
         header.CSID = 2;
         header.timestamp = 0;
         header.msgLength = 4;
-        header.msgType = RtmpHeader.MSG_TYPE_SET_CHUNK_SIZE;
+        header.msgType = type;
         header.msgSID = 0;
         byte[] chunkSize = new byte[4];
-        ByteUtil.writeInt(4, size, chunkSize, 0);
+        ByteUtil.writeInt(4, num, chunkSize, 0);
         header.write(out);
         out.write(chunkSize);
+    }
+
+    public void play(String streamName) throws IOException {
+        List<String> list = new ArrayList<>();
+        list.add(streamName);
+        list.add("live");
+        execute(8, "play", 6.0, list);
     }
 }
