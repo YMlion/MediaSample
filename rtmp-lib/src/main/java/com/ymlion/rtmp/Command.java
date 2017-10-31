@@ -25,7 +25,7 @@ public class Command {
         out = outputStream;
     }
 
-    public void connect(String app, String tcUrl, String streamName) throws IOException {
+    public void connect(String app, String tcUrl) throws IOException {
         System.out.println("rtmp start connecting...");
         RString name = new RString("connect", false);
         byte[] nameBytes = name.getBytes();
@@ -51,20 +51,49 @@ public class Command {
         System.out.println("rtmp connected.");
     }
 
+    public void connectPlay(String app, String tcUrl) throws IOException {
+        System.out.println("rtmp start connecting...");
+        RString name = new RString("connect", false);
+        byte[] nameBytes = name.getBytes();
+        byte[] number = new RNumber(1.0).getBytes();
+        CommandObject object = new CommandObject();
+        object.put("app", app);
+        object.put("flashVer", "LNX 9,0,124,2");
+        object.put("tcUrl", tcUrl);
+        object.put("fpad", false);
+        object.put("capabilities", 15);
+        object.put("audioCodecs", 4071);
+        object.put("videoCodecs", 252);
+        object.put("videoFunction", 1);
+        RtmpHeader header = new RtmpHeader();
+        header.fmt = 0;
+        header.CSID = 3;
+        header.timestamp = 0;
+        header.msgType = RtmpHeader.MSG_TYPE_COMMAND;
+        header.msgSID = 0;
+        header.msgLength = nameBytes.length + number.length + object.getByteSize();
+        header.write(out);
+        out.write(nameBytes);
+        out.write(number);
+        object.write(out);
+        out.flush();
+        System.out.println("rtmp connected.");
+    }
+
     public void publish(String streamName) throws IOException {
         List<String> list = new ArrayList<>();
         list.add(streamName);
         list.add("live");
-        execute(8, "publish", 6.0, list);
+        execute(1, 8, "publish", 6.0, list);
     }
 
     public void execute(int CSID, String command, double number, String string) throws IOException {
         List<String> strings = new ArrayList<>();
         strings.add(string);
-        execute(CSID, command, number, strings);
+        execute(1, CSID, command, number, strings);
     }
 
-    public void execute(int CSID, String command, double number, List<String> strings)
+    public void execute(int fmt, int CSID, String command, double number, List<String> strings)
             throws IOException {
         System.out.println("execute " + command);
         int total = 0;
@@ -84,7 +113,7 @@ public class Command {
             }
         }
         RtmpHeader header = new RtmpHeader();
-        header.fmt = 1;
+        header.fmt = fmt;
         header.CSID = CSID;
         header.timestamp = 0;
         header.msgType = RtmpHeader.MSG_TYPE_COMMAND;
@@ -184,7 +213,23 @@ public class Command {
     public void play(String streamName) throws IOException {
         List<String> list = new ArrayList<>();
         list.add(streamName);
-        list.add("live");
-        execute(8, "play", 6.0, list);
+        execute(0, 8, "play", 6.0, list);
+    }
+
+    public void setBufferLength() throws IOException {
+        System.out.println("set buffer length.");
+        RtmpHeader header = new RtmpHeader();
+        header.fmt = 1;
+        header.CSID = 2;
+        header.timestamp = 1;
+        header.msgLength = 10;
+        header.msgType = 4;
+        byte[] chunkSize = new byte[10];
+        ByteUtil.writeInt(2, 3, chunkSize, 0);
+        ByteUtil.writeInt(4, 1, chunkSize, 2);
+        ByteUtil.writeInt(4, 3000, chunkSize, 6);
+        header.write(out);
+        out.write(chunkSize);
+        out.flush();
     }
 }

@@ -14,10 +14,21 @@ public class Frame {
 
     private long time;
 
-    public Frame(boolean type, byte[] data, long time) {
+    private boolean header;
+
+    /**
+     * create a instance
+     *
+     * @param type true : video; false : audio
+     * @param data original frame data
+     * @param time timestamp
+     * @param isHeader true is sps(pps) data;  false is original frame data
+     */
+    public Frame(boolean type, byte[] data, long time, boolean isHeader) {
         this.time = time;
         this.type = type;
         this.data = data;
+        this.header = isHeader;
     }
 
     public long getTime() {
@@ -30,5 +41,9 @@ public class Frame {
 
     public byte[] getData() {
         return data;
+    }
+
+    public boolean isHeader() {
+        return header;
     }
 }

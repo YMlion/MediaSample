@@ -168,12 +168,15 @@ public class RtmpHeader {
             case 1:
                 r = in.read(head, 0, 7);
                 msgLength = ByteUtil.bytes2Int(3, head, 3);
+                msgType = head[6] & 0xff;
                 break;
             case 2:
                 r = in.read(head, 0, 3);
+                msgType = -1;
                 msgLength = -1;
                 break;
             default:
+                msgType = -1;
                 msgLength = -1;
                 break;
         }

@@ -147,7 +147,7 @@ class RecordActivity : Activity() {
                 val data = ByteArray(sl + pl)
                 sps.get(data, 0, sl)
                 pps.get(data, sl, pl)
-                frameArray.add(Frame(true, data, 0))
+                frameArray.add(Frame(true, data, 0, true))
                 synchronized(socketObject, {
                     socketObject.notify()
                 })
@@ -157,7 +157,7 @@ class RecordActivity : Activity() {
                 val sps = format?.getByteBuffer("csd-0")
                 val data = ByteArray(sps!!.limit())
                 sps.get(data)
-                frameArray.add(Frame(false, data, 0))
+                frameArray.add(Frame(false, data, 0, true))
                 synchronized(socketObject, {
                     socketObject.notify()
                 })
@@ -165,7 +165,7 @@ class RecordActivity : Activity() {
 
             override fun onVideoFrame(frame: ByteArray?, time: Long) {
                 Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
-                frameArray.add(Frame(true, frame, time / 1000))
+                frameArray.add(Frame(true, frame, time / 1000, false))
                 synchronized(socketObject, {
                     socketObject.notify()
                 })
@@ -173,7 +173,7 @@ class RecordActivity : Activity() {
 
             override fun onAudioFrame(frame: ByteArray?, time: Long) {
                 Log.d("TAG", "onAudioFrame size is ${frame?.size} + $time")
-                frameArray.add(Frame(false, frame, time / 1000))
+                frameArray.add(Frame(false, frame, time / 1000, false))
                 synchronized(socketObject, {
                     socketObject.notify()
                 })

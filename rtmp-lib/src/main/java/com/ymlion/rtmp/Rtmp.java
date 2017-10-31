@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
-import java.util.List;
 
 /**
  * 推流
@@ -60,14 +59,14 @@ public class Rtmp {
         }).start();
         Command command = new Command(outputStream);
         command.setChunkSize(CHUNK_SIZE);
-        command.connect(appName, tcUrl, streamName);
+        command.connect(appName, tcUrl);
         waitRead();
         command.execute(3, "releaseStream", 2.0, streamName);
         waitRead();
         command.execute(3, "FCPublish", 3.0, streamName);
         waitRead();
-        command.execute(3, "createStream", 4.0, (List<String>) null);
-        command.execute(3, "_checkbw", 5.0, (List<String>) null);
+        command.execute(1, 3, "createStream", 4.0, null);
+        command.execute(1, 3, "_checkbw", 5.0, null);
         waitRead();
         command.publish(streamName);
         command.sendMetaData();
@@ -86,10 +85,13 @@ public class Rtmp {
     }
 
     private final Object readX = new Object();
+    private ChunkReader reader;
 
     private void handleReceivedData() throws IOException {
         while (connected) {
-            ChunkReader reader = new ChunkReader();
+            if (reader == null) {
+                reader = new ChunkReader();
+            }
             boolean next = reader.readChunk(inputStream, writeObj);
             if (!next) {
                 synchronized (readX) {
@@ -284,7 +286,7 @@ public class Rtmp {
     public void sendAudio(Frame frame) throws IOException {
         byte[] data = new byte[frame.getData().length + 2];
         data[0] = (byte) 0xaf;
-        data[1] = (byte) (frame.getData().length > 2 ? 1 : 0);
+        data[1] = (byte) (frame.isHeader() ? 0 : 1);
         System.arraycopy(frame.getData(), 0, data, 2, frame.getData().length);
         RtmpHeader header = new RtmpHeader();
         header.fmt = 0;

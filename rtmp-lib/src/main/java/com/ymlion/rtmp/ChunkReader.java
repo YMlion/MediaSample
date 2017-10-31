@@ -1,5 +1,7 @@
 package com.ymlion.rtmp;
 
+import com.ymlion.rtmp.bean.CommandObject;
+import com.ymlion.rtmp.bean.Frame;
 import com.ymlion.rtmp.bean.RString;
 import com.ymlion.rtmp.bean.RtmpHeader;
 import com.ymlion.rtmp.util.ByteUtil;
@@ -12,6 +14,12 @@ import java.io.InputStream;
 
 public class ChunkReader {
     private static int READ_CHUNK_SIZE = 128;
+    private ChunkReaderListener listener;
+    private int lastMsgType = -1;
+
+    public void setListener(ChunkReaderListener listener) {
+        this.listener = listener;
+    }
 
     public boolean readChunk(InputStream in, Object writeObj) throws IOException {
         RtmpHeader header = new RtmpHeader();
@@ -30,14 +38,20 @@ public class ChunkReader {
         if (l <= 0) {
             return false;
         }
-        checkType(header.msgType, chunkBody, writeObj);
+        checkType(header, chunkBody, writeObj);
         return true;
     }
 
-    private void checkType(int msgType, byte[] chunkBody, Object writeObj) {
-        System.out.print("rtmp chunk header type is " + msgType + " : ");
+    private void checkType(RtmpHeader header, byte[] chunkBody, Object writeObj)
+            throws IOException {
+        if (header.msgType == -1) {
+            header.msgType = lastMsgType;
+        } else {
+            lastMsgType = header.msgType;
+        }
+        System.out.print("rtmp chunk header type is " + header.msgType + " : ");
         String log;
-        switch (msgType) {
+        switch (header.msgType) {
             case RtmpHeader.MSG_TYPE_SET_CHUNK_SIZE:
                 READ_CHUNK_SIZE = ByteUtil.bytes2Int(4, chunkBody, 0);
                 log = "set chunk size " + READ_CHUNK_SIZE;
@@ -62,6 +76,10 @@ public class ChunkReader {
                 log = "设置数据";
                 RString dataCommad = RString.read(chunkBody, false);
                 if (dataCommad.value().equals("onMetaData")) {
+                    CommandObject object = CommandObject.read(chunkBody, dataCommad.getSize());
+                    if (listener != null) {
+                        listener.onPlayStart(object);
+                    }
                 }
                 break;
             case RtmpHeader.MSG_TYPE_COMMAND:
@@ -77,10 +95,49 @@ public class ChunkReader {
                 }
                 log += com;
                 break;
+            case RtmpHeader.MSG_TYPE_AUDIO:
+                log = "audio data";
+                if (listener != null) {
+                    byte[] audioFrame = new byte[chunkBody.length - 2];
+                    System.arraycopy(chunkBody, 2, audioFrame, 0, audioFrame.length);
+                    listener.onPlayAudio(
+                            new Frame(false, audioFrame, header.timestamp, chunkBody[1] == 0));
+                }
+                break;
+            case RtmpHeader.MSG_TYPE_VIDEO:
+                log = "video data";
+                if (listener != null) {
+                    boolean isHeader = chunkBody[1] == 0;
+                    if (isHeader) {
+                        byte[] videoFrame = new byte[chunkBody.length - 11];
+                        System.arraycopy(chunkBody, 11, videoFrame, 0, videoFrame.length);
+                        listener.onPlayVideo(new Frame(true, videoFrame, header.timestamp, true));
+                    } else {
+                        byte[] videoFrame = new byte[chunkBody.length - 5];
+                        System.arraycopy(chunkBody, 5, videoFrame, 0, videoFrame.length);
+                        int vl = ByteUtil.bytes2Int(4, videoFrame, 0);
+                        videoFrame[0] = videoFrame[1] = videoFrame[2] = 0;
+                        videoFrame[3] = 1;
+                        if (vl + 4 < videoFrame.length) {
+                            videoFrame[vl + 4] = videoFrame[vl + 5] = videoFrame[vl + 6] = 0;
+                            videoFrame[vl + 7] = 1;
+                        }
+                        listener.onPlayVideo(new Frame(true, videoFrame, header.timestamp, false));
+                    }
+                }
+                break;
             default:
                 log = "";
                 break;
         }
         System.out.println(log);
+    }
+
+    public interface ChunkReaderListener {
+        void onPlayStart(CommandObject metaData);
+
+        void onPlayAudio(Frame frame);
+
+        void onPlayVideo(Frame frame);
     }
 }

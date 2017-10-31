@@ -5,10 +5,12 @@ import android.content.Intent
 import android.os.Bundle
 import com.ymlion.mediasample.capture.Camera1Activity
 import com.ymlion.mediasample.capture.CaptureActivity
+import com.ymlion.mediasample.live.LiveActivity
 import com.ymlion.mediasample.player.VideoPlayActivity
 import com.ymlion.mediasample.record.RecordActivity
 import kotlinx.android.synthetic.main.activity_menu.btn_capture
 import kotlinx.android.synthetic.main.activity_menu.btn_capture1
+import kotlinx.android.synthetic.main.activity_menu.btn_live
 import kotlinx.android.synthetic.main.activity_menu.btn_playback
 import kotlinx.android.synthetic.main.activity_menu.btn_record
 
@@ -29,30 +31,8 @@ class MenuActivity : Activity() {
         btn_capture1.setOnClickListener {
             startActivity(Intent(this, Camera1Activity::class.java))
         }
-
-        /*thread {
-            rtmpConnect()
-            while (!close) {
-            }
-            rtmp.close()
-        }*/
-    }
-
-    /*private lateinit var rtmp: Rtmp
-
-    private fun rtmpConnect() {
-        rtmp = Rtmp("10.32.10.219", "test", "live")
-        try {
-            rtmp.connect()
-        } catch (e: Exception) {
-            e.printStackTrace()
+        btn_live.setOnClickListener {
+            startActivity(Intent(this, LiveActivity::class.java))
         }
     }
-
-    private var close: Boolean = false
-
-    override fun onDestroy() {
-        close = true
-        super.onDestroy()
-    }*/
 }

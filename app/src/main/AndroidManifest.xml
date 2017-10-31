@@ -35,6 +35,8 @@
             </intent-filter>
         </activity>
         <activity android:name=".capture.Camera1Activity"/>
+        <activity android:name=".live.LiveActivity">
+        </activity>
     </application>
 
 </manifest>
