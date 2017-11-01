@@ -95,7 +95,7 @@ public class RtmpPlay {
             if (!next) {
                 synchronized (readX) {
                     try {
-                        readX.wait(1000);
+                        readX.wait(200);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }

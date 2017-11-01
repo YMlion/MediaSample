@@ -6,6 +6,7 @@ import android.media.MediaCodec.BufferInfo
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.ArrayMap
 import android.util.Log
 import android.view.SurfaceHolder
@@ -24,7 +25,6 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
 
     private lateinit var player: RtmpPlay
     private var configureMap: ArrayMap<String, String>? = null
-    private var sp: Frame? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +46,7 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
     private fun rtmpConnect() {
         thread {
             player = RtmpPlay("10.32.10.219", "test", "live")
-//            val player = RtmpPlay("23.106.136.168", "test", "live")
+//            player = RtmpPlay("23.106.136.168", "test", "live")
             player.setListener(this)
             player.connect()
         }
@@ -72,17 +72,50 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
 
     override fun onPlayVideo(frame: Frame) {
         if (frame.isHeader) {
-            sp = frame
+            if (!playEnd) {
+                return
+            }
+            var l = ByteUtil.bytes2Int(2, frame.data, 0)
+            sps = ByteArray(l + 4)
+            System.arraycopy(frame.data, 2, sps, 4, l)
+            l = ByteUtil.bytes2Int(2, frame.data, l + 3)
+            pps = ByteArray(l + 4)
+            for (i in 0..2) {
+                sps[i] = 0
+                pps[i] = 0
+            }
+            sps[3] = 1
+            pps[3] = 1
+            System.arraycopy(frame.data, sps.size + 1, pps, 4, l)
+            Log.e("TAG", "get sps and pps")
             playVideo()
         } else {
             videoFrames.add(frame)
+            /*if ((frame.data[4] and 0x1f) == 5.toByte()) {
+                val firstFrame = ByteArray(sps.size + pps.size + frame.data.size)
+                System.arraycopy(sps, 0, firstFrame, 0, sps.size)
+                System.arraycopy(pps, 0, firstFrame, sps.size, pps.size)
+                System.arraycopy(frame.data, 0, firstFrame, sps.size + pps.size, frame.data.size)
+                videoFrames.add(Frame(true, firstFrame, frame.time, true))
+                Log.e("TAG", "key frame")
+            } else {
+                val firstFrame = ByteArray(pps.size + frame.data.size)
+                System.arraycopy(pps, 0, firstFrame, 0, pps.size)
+                System.arraycopy(frame.data, 0, firstFrame, pps.size, frame.data.size)
+                videoFrames.add(Frame(true, firstFrame, frame.time, true))
+                Log.e("TAG", "P frame " + pps.size)
+            }*/
             synchronized(waitObj, {
                 waitObj.notify()
             })
         }
     }
 
+    private lateinit var sps: ByteArray
+    private lateinit var pps: ByteArray
+
     private fun playVideo() {
+        playEnd = false
         val format = MediaFormat.createVideoFormat("video/avc",
                 configureMap!!.get("width")!!.toDouble().toInt(),
                 configureMap!!.get("height")!!.toDouble().toInt())
@@ -90,18 +123,6 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
                 configureMap!!.get("framerate")!!.toDouble().toInt())
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-        var l = ByteUtil.bytes2Int(2, sp!!.data, 0)
-        var sps = ByteArray(l + 4)
-        System.arraycopy(sp!!.data, 2, sps, 4, l)
-        l = ByteUtil.bytes2Int(2, sp!!.data, l + 3)
-        var pps = ByteArray(l + 4)
-        for (i in 0..2) {
-            sps[i] = 0
-            pps[i] = 0
-        }
-        sps[3] = 1
-        pps[3] = 1
-        System.arraycopy(sp!!.data, sps.size - 1, pps, 4, l)
         format.setByteBuffer("csd-0", ByteBuffer.wrap(sps))
         format.setByteBuffer("csd-1", ByteBuffer.wrap(pps))
         videoCodec = MediaCodec.createDecoderByType("video/avc")
@@ -117,7 +138,7 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
     private lateinit var videoCodec: MediaCodec
     private val waitObj = Object()
     private val videoFrames = ArrayList<Frame>()
-    private var playEnd = false
+    private var playEnd = true
 
     private fun handleFrame() {
         while (!playEnd) {
@@ -126,6 +147,7 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
                 if (frame.isVideo) {
                     decodeFrame(frame)
                 }
+                SystemClock.sleep(35)
             } else {
                 synchronized(waitObj, {
                     try {
@@ -143,6 +165,7 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
         var index = videoCodec.dequeueInputBuffer(10000)
         if (index >= 0) {
             var buffer = videoCodec.getInputBuffer(index)
+            buffer.clear()
             buffer.put(frame.data)
             videoCodec.queueInputBuffer(index, 0, frame.data.size, frame.time * 1000, 0)
         }

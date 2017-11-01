@@ -5,8 +5,11 @@ import com.ymlion.rtmp.bean.Frame;
 import com.ymlion.rtmp.bean.RString;
 import com.ymlion.rtmp.bean.RtmpHeader;
 import com.ymlion.rtmp.util.ByteUtil;
+import java.io.BufferedOutputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 /**
  * Created by YMlion on 2017/10/16.
@@ -16,12 +19,17 @@ public class ChunkReader {
     private static int READ_CHUNK_SIZE = 128;
     private ChunkReaderListener listener;
     private int lastMsgType = -1;
+    private OutputStream out;
 
     public void setListener(ChunkReaderListener listener) {
         this.listener = listener;
     }
 
     public boolean readChunk(InputStream in, Object writeObj) throws IOException {
+        if (out == null) {
+            out = new BufferedOutputStream(new FileOutputStream(
+                    "/storage/emulated/0/" + System.currentTimeMillis() + "_.h264"));
+        }
         RtmpHeader header = new RtmpHeader();
         int r = header.read(in);
         if (r <= 0) {
@@ -105,24 +113,39 @@ public class ChunkReader {
                 }
                 break;
             case RtmpHeader.MSG_TYPE_VIDEO:
-                log = "video data";
+                log = "video data " + header.msgLength;
+                header.write(out);
+                out.write(chunkBody);
+                out.flush();
                 if (listener != null) {
                     boolean isHeader = chunkBody[1] == 0;
                     if (isHeader) {
                         byte[] videoFrame = new byte[chunkBody.length - 11];
                         System.arraycopy(chunkBody, 11, videoFrame, 0, videoFrame.length);
+                        for (byte b : videoFrame) {
+                            System.out.print((b & 0xff) + " ");
+                        }
+                        System.out.println();
                         listener.onPlayVideo(new Frame(true, videoFrame, header.timestamp, true));
                     } else {
                         byte[] videoFrame = new byte[chunkBody.length - 5];
                         System.arraycopy(chunkBody, 5, videoFrame, 0, videoFrame.length);
                         int vl = ByteUtil.bytes2Int(4, videoFrame, 0);
+                        log += " " + vl;
                         videoFrame[0] = videoFrame[1] = videoFrame[2] = 0;
                         videoFrame[3] = 1;
                         if (vl + 4 < videoFrame.length) {
+                            vl = ByteUtil.bytes2Int(4, videoFrame, vl + 4);
+                            log += " " + vl;
                             videoFrame[vl + 4] = videoFrame[vl + 5] = videoFrame[vl + 6] = 0;
                             videoFrame[vl + 7] = 1;
                         }
                         listener.onPlayVideo(new Frame(true, videoFrame, header.timestamp, false));
+                    }
+                    try {
+                        Thread.sleep(35);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
                     }
                 }
                 break;
