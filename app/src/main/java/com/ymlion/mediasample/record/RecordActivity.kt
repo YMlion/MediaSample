@@ -19,7 +19,7 @@ import kotlinx.android.synthetic.main.activity_record.record_seconds_tv
 import kotlinx.android.synthetic.main.activity_record.textureView
 import kotlin.concurrent.thread
 
-class RecordActivity : Activity() {
+class RecordActivity : Activity(), RecordListener {
 
     private lateinit var rm: RecordManager
     private lateinit var timer: CountDownTimer
@@ -138,58 +138,57 @@ class RecordActivity : Activity() {
         Log.d("MAIN",
                 "openCamera: texture view size : " + textureView.width + " ; " + textureView.height)
         rm.open(width, height)
-        rm.setRecordListener(object : RecordListener {
-            override fun onVideoFormatChanged(format: MediaFormat?) {
-                val sps = format?.getByteBuffer("csd-0")
-                val pps = format?.getByteBuffer("csd-1")
-                val sl = sps!!.limit()
-                val pl = pps!!.limit()
-                val data = ByteArray(sl + pl)
-                sps.get(data, 0, sl)
-                pps.get(data, sl, pl)
-                frameArray.add(Frame(true, data, 0, true))
-                synchronized(socketObject, {
-                    socketObject.notify()
-                })
-            }
+//        rm.setRecordListener(this)
+    }
 
-            override fun onAudioFormatChanged(format: MediaFormat?) {
-                val sps = format?.getByteBuffer("csd-0")
-                val data = ByteArray(sps!!.limit())
-                sps.get(data)
-                frameArray.add(Frame(false, data, 0, true))
-                synchronized(socketObject, {
-                    socketObject.notify()
-                })
-            }
+    override fun onVideoFormatChanged(format: MediaFormat?) {
+        val sps = format?.getByteBuffer("csd-0")
+        val pps = format?.getByteBuffer("csd-1")
+        val sl = sps!!.limit()
+        val pl = pps!!.limit()
+        val data = ByteArray(sl + pl)
+        sps.get(data, 0, sl)
+        pps.get(data, sl, pl)
+        frameArray.add(Frame(true, data, 0, true))
+        synchronized(socketObject, {
+            socketObject.notify()
+        })
+    }
 
-            override fun onVideoFrame(frame: ByteArray?, time: Long) {
-                Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
-                frameArray.add(Frame(true, frame, time / 1000, false))
-                synchronized(socketObject, {
-                    socketObject.notify()
-                })
-            }
+    override fun onAudioFormatChanged(format: MediaFormat?) {
+        val sps = format?.getByteBuffer("csd-0")
+        val data = ByteArray(sps!!.limit())
+        sps.get(data)
+        frameArray.add(Frame(false, data, 0, true))
+        synchronized(socketObject, {
+            socketObject.notify()
+        })
+    }
 
-            override fun onAudioFrame(frame: ByteArray?, time: Long) {
-                Log.d("TAG", "onAudioFrame size is ${frame?.size} + $time")
-                frameArray.add(Frame(false, frame, time / 1000, false))
-                synchronized(socketObject, {
-                    socketObject.notify()
-                })
-            }
+    override fun onVideoFrame(frame: ByteArray?, time: Long) {
+        Log.d("TAG", "onVideoFrame size is ${frame?.size} + $time")
+        frameArray.add(Frame(true, frame, time / 1000, false))
+        synchronized(socketObject, {
+            socketObject.notify()
+        })
+    }
 
+    override fun onAudioFrame(frame: ByteArray?, time: Long) {
+        Log.d("TAG", "onAudioFrame size is ${frame?.size} + $time")
+        frameArray.add(Frame(false, frame, time / 1000, false))
+        synchronized(socketObject, {
+            socketObject.notify()
         })
     }
 
     override fun onStop() {
         super.onStop()
-        rm.stopRecord()
+        rm.stopRecord(true)
         rm.close()
     }
 
     fun stopRecord(view: View) {
-        rm.stopRecord()
+        rm.stopRecord(false)
         timer.cancel()
         record_seconds_tv.visibility = View.GONE
     }
@@ -206,7 +205,7 @@ class RecordActivity : Activity() {
             }
         }
         timer.start()
-        rm.startRecord()
+        rm.startRecord(720, 480)
     }
 
 

@@ -81,7 +81,7 @@ object ImageUtil {
         return null
     }
 
-    private fun getDataFromImage(image: Image, colorFormat: Int): ByteArray {
+    fun getDataFromImage(image: Image, colorFormat: Int): ByteArray {
         if (colorFormat != COLOR_FormatI420 && colorFormat != COLOR_FormatNV21) {
             throw IllegalArgumentException(
                     "only support COLOR_FormatI420 " + "and COLOR_FormatNV21")

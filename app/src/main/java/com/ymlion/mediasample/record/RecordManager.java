@@ -4,10 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
 import android.graphics.ImageFormat;
-import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -137,6 +134,9 @@ public class RecordManager {
     private Handler audioHandler;
     private boolean recordStop = false;
     private RecordListener recordListener;
+    private int displayWidth;
+    private int displayHeight;
+    private List<byte[]> frames = new ArrayList<>();
 
     public RecordManager(Context context, SurfaceTexture surfaceTexture) {
         this.mContext = context;
@@ -186,14 +186,18 @@ public class RecordManager {
         }
     }
 
-    public void startRecord() {
+    public void startRecord(int width, int height) {
         Log.d(TAG, "startRecord");
+        displayWidth = width;
+        displayHeight = height;
         mState = STATE_RECORDING;
         recordStop = false;
         setupRecord();
         try {
             inputSurface = videoEncoder.createInputSurface();
-            List<Surface> surfaces = Arrays.asList(mPreviewSurface, inputSurface);
+            //setupImageReader();
+            List<Surface> surfaces =
+                    Arrays.asList(mPreviewSurface, inputSurface/*, imageReader.getSurface()*/);
             mCameraDevice.createCaptureSession(surfaces, new SessionStateCallback(),
                     mThreadHandler);
         } catch (CameraAccessException e) {
@@ -313,7 +317,7 @@ public class RecordManager {
         int frameRate = 25;           //帧率，30帧
         int frameInterval = 1;        //关键帧一秒一关键帧
 
-        MediaFormat format = MediaFormat.createVideoFormat(mime, 720, 480);
+        MediaFormat format = MediaFormat.createVideoFormat(mime, displayWidth, displayHeight);
         format.setInteger(MediaFormat.KEY_BIT_RATE, rate);
         format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, frameInterval);
@@ -321,6 +325,25 @@ public class RecordManager {
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         videoEncoder = MediaCodec.createEncoderByType("video/avc");
         videoEncoder.setCallback(new CodecCallback() {
+
+            private long startTime = 0;
+
+            @Override public void onInputBufferAvailable(@Nullable MediaCodec codec, int index) {
+                Log.d(TAG, "onInputBufferAvailable: ");
+                if (frames.isEmpty()) {
+                    return;
+                }
+                assert codec != null;
+                ByteBuffer buffer = codec.getInputBuffer(index);
+                assert buffer != null;
+                buffer.put(frames.remove(0));
+                if (startTime == 0) {
+                    startTime = System.nanoTime() / 1000;
+                }
+                long presentationTimeUs = System.nanoTime() / 1000 - startTime;
+                codec.queueInputBuffer(index, 0, buffer.limit(), presentationTimeUs, 0);
+            }
+
             @Override public void onOutputBufferAvailable(MediaCodec codec, int index,
                     MediaCodec.BufferInfo info) {
                 sendMsg(1, index, info, videoHandler);
@@ -365,14 +388,6 @@ public class RecordManager {
                                     recordListener.onVideoFrame(bytes, info.presentationTimeUs);
                                 }
                                 // todo 直接写入文件的是未封装的h264数据
-                                /*byte[] bytes = new byte[info.size];
-                                buffer.get(bytes);
-                                    try {
-                                    out.write(bytes);
-                                    out.flush();
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }*/
                             }
                         }
                         videoEncoder.releaseOutputBuffer(index, false);
@@ -414,13 +429,16 @@ public class RecordManager {
         return new Handler(thread.getLooper(), callback);
     }
 
-    public void stopRecord() {
+    public void stopRecord(boolean close) {
         if (mState != STATE_RECORDING) {
             return;
         }
         Log.d(TAG, "stopRecord");
         mState = STATE_RECORDED;
         videoEncoder.signalEndOfInputStream();
+        if (close) {
+            return;
+        }
         try {
             List<Surface> surfaces = Collections.singletonList(mPreviewSurface);
             //List<Surface> surfaces = Collections.singletonList(imageReader.getSurface());
@@ -447,24 +465,27 @@ public class RecordManager {
     private void setupImageReader() {
         // TODO: 2017/9/6 同样可以使用ImageReader设置回调来获取每一帧数据，然后将数据放入codec的buffer中进行编码
         // FIXME: 2017/9/7 使用ImageReader获取每一帧数据特别卡顿，暂时没有找到解决方法。
-        imageReader = ImageReader.newInstance(1920, 1080, ImageFormat.YUV_420_888/*PixelFormat.RGBX_8888*/,
+        imageReader = ImageReader.newInstance(displayWidth, displayHeight, ImageFormat.YUV_420_888/*PixelFormat.RGBX_8888*/,
                 1);
         HandlerThread thread = new HandlerThread("ImageReader");
         thread.start();
         Handler handler = new Handler(thread.getLooper());
-        final Paint paint = new Paint();
         imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
             @Override public void onImageAvailable(ImageReader reader) {
                 Image image = reader.acquireNextImage();
-                Log.e(TAG, "onImageAvailable: image format is " + image.getFormat());
-                Bitmap bm = ImageUtil.INSTANCE.getBitmap(image);
+                Log.d(TAG, "onImageAvailable: image format is "
+                        + image.getFormat()
+                        + " "
+                        + image.getHeight()
+                        + "*"
+                        + image.getWidth());
+                frames.add(ImageUtil.INSTANCE.getDataFromImage(image, 1));
+                image.close();
+                /*Bitmap bm = ImageUtil.INSTANCE.getBitmap(image);
                 if (bm == null) {
                     Log.e(TAG, "onImageAvailable: null");
                     return;
-                }
-                Canvas canvas = mPreviewSurface.lockCanvas(null);
-                canvas.drawBitmap(bm, 0, 0, paint);
-                mPreviewSurface.unlockCanvasAndPost(canvas);
+                }*/
             }
         }, handler);
     }
@@ -513,6 +534,7 @@ public class RecordManager {
                             mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
                     builder.addTarget(mPreviewSurface);
                     builder.addTarget(inputSurface);
+                    //builder.addTarget(imageReader.getSurface());
                     mCaptureSession.setRepeatingRequest(builder.build(), mCaptureCallback, null);
                     videoEncoder.start();
                     audioRecord.startRecording();

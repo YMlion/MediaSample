@@ -88,8 +88,8 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
     private lateinit var audioCodec: MediaCodec
     private fun playAudio(sps: ByteArray) {
         val sampleRate = configureMap!!["audiosamplerate"]!!.toDouble().toInt()
-        val channelCount = configureMap!!["audiochannels"]!!.toDouble().toInt()
-        val format = MediaFormat.createAudioFormat("audio/aac", sampleRate, channelCount)
+        val channelCount = 2
+        val format = MediaFormat.createAudioFormat("audio/mp4a-latm", sampleRate, channelCount)
         format.setByteBuffer("csd-0", ByteBuffer.wrap(sps))
         val minBufferSize = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO,
                 AudioFormat.ENCODING_PCM_16BIT)
@@ -97,7 +97,7 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
                 AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT, minBufferSize,
                 AudioTrack.MODE_STREAM)
         audioTrack.play()
-        audioCodec = createDecoderByType("audio/aac")
+        audioCodec = createDecoderByType("audio/mp4a-latm")
         audioCodec.configure(format, null, null, 0)
         audioCodec.start()
     }
@@ -154,6 +154,10 @@ class LiveActivity : Activity(), ChunkReader.ChunkReaderListener {
         while (!playEnd) {
             if (frames.isNotEmpty()) {
                 val frame = frames.removeAt(0)
+                if (frame == null) {
+                    Log.e("LiveActivity", "frame is null")
+                    continue
+                }
                 if (frame.isVideo) {
                     decodeVideoFrame(frame)
                 } else {
