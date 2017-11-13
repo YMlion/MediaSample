@@ -40,9 +40,12 @@ import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 import com.ymlion.mediasample.util.CodecCallback;
-import com.ymlion.mediasample.util.ImageUtil;
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -136,7 +139,7 @@ public class RecordManager {
     private RecordListener recordListener;
     private int displayWidth;
     private int displayHeight;
-    private List<byte[]> frames = new ArrayList<>();
+    //private ByteBuffer frame;
 
     public RecordManager(Context context, SurfaceTexture surfaceTexture) {
         this.mContext = context;
@@ -196,8 +199,7 @@ public class RecordManager {
         try {
             inputSurface = videoEncoder.createInputSurface();
             //setupImageReader();
-            List<Surface> surfaces =
-                    Arrays.asList(mPreviewSurface, inputSurface/*, imageReader.getSurface()*/);
+            List<Surface> surfaces = Arrays.asList(mPreviewSurface, inputSurface);
             mCameraDevice.createCaptureSession(surfaces, new SessionStateCallback(),
                     mThreadHandler);
         } catch (CameraAccessException e) {
@@ -326,26 +328,13 @@ public class RecordManager {
         videoEncoder = MediaCodec.createEncoderByType("video/avc");
         videoEncoder.setCallback(new CodecCallback() {
 
-            private long startTime = 0;
-
             @Override public void onInputBufferAvailable(@Nullable MediaCodec codec, int index) {
                 Log.d(TAG, "onInputBufferAvailable: ");
-                if (frames.isEmpty()) {
-                    return;
-                }
-                assert codec != null;
-                ByteBuffer buffer = codec.getInputBuffer(index);
-                assert buffer != null;
-                buffer.put(frames.remove(0));
-                if (startTime == 0) {
-                    startTime = System.nanoTime() / 1000;
-                }
-                long presentationTimeUs = System.nanoTime() / 1000 - startTime;
-                codec.queueInputBuffer(index, 0, buffer.limit(), presentationTimeUs, 0);
             }
 
             @Override public void onOutputBufferAvailable(MediaCodec codec, int index,
                     MediaCodec.BufferInfo info) {
+                Log.d(TAG, "onOutputBufferAvailable: ");
                 sendMsg(1, index, info, videoHandler);
             }
 
@@ -465,27 +454,44 @@ public class RecordManager {
     private void setupImageReader() {
         // TODO: 2017/9/6 同样可以使用ImageReader设置回调来获取每一帧数据，然后将数据放入codec的buffer中进行编码
         // FIXME: 2017/9/7 使用ImageReader获取每一帧数据特别卡顿，暂时没有找到解决方法。
-        imageReader = ImageReader.newInstance(displayWidth, displayHeight, ImageFormat.YUV_420_888/*PixelFormat.RGBX_8888*/,
-                1);
+        imageReader = ImageReader.newInstance(720, 480, ImageFormat.YUV_420_888, 1);
         HandlerThread thread = new HandlerThread("ImageReader");
         thread.start();
         Handler handler = new Handler(thread.getLooper());
         imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+
+            private OutputStream out;
+
             @Override public void onImageAvailable(ImageReader reader) {
+                if (out == null) {
+                    try {
+                        out = new BufferedOutputStream(new FileOutputStream(
+                                Environment.getExternalStoragePublicDirectory(
+                                        Environment.DIRECTORY_MOVIES).getAbsolutePath()
+                                        + "/"
+                                        + System.currentTimeMillis()
+                                        + ".yuv"));
+                    } catch (FileNotFoundException e) {
+                        e.printStackTrace();
+                    }
+                }
                 Image image = reader.acquireNextImage();
-                Log.d(TAG, "onImageAvailable: image format is "
-                        + image.getFormat()
-                        + " "
-                        + image.getHeight()
-                        + "*"
-                        + image.getWidth());
-                frames.add(ImageUtil.INSTANCE.getDataFromImage(image, 1));
+                ByteBuffer y = image.getPlanes()[0].getBuffer();
+                ByteBuffer u = image.getPlanes()[1].getBuffer();
+                ByteBuffer v = image.getPlanes()[2].getBuffer();
+                byte[] data = new byte[y.limit() + u.limit() + v.limit()];
+                y.get(data, 0, y.limit());
+                u.get(data, y.limit(), u.limit());
+                v.get(data, y.limit() + u.limit(), v.limit());
+                Log.d(TAG, "onImageAvailable: " + y.limit() + "; " + u.limit() + "; " + v.limit());
+                if (out != null) {
+                    try {
+                        out.write(data);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
                 image.close();
-                /*Bitmap bm = ImageUtil.INSTANCE.getBitmap(image);
-                if (bm == null) {
-                    Log.e(TAG, "onImageAvailable: null");
-                    return;
-                }*/
             }
         }, handler);
     }

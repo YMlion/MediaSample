@@ -41,7 +41,7 @@ public class ByteUtil {
     }
 
     /**
-     * big-endian
+     * IEEE浮点双精度表示，64 bits：1 bit符号位 + 11位阶码 + 52位尾数
      *
      * @param d source num
      * @return dst bytes
