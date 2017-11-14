@@ -1,5 +1,6 @@
 package com.ymlion.rtmp;
 
+import com.ymlion.rtmp.util.ByteUtil;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
@@ -39,9 +40,7 @@ public class HandShake {
         System.out.println("shake hand : write C1");
         byte[] timeBytes = new byte[4];
         int time = (int) (System.currentTimeMillis() / 1000);
-        for (int i = 0; i < 4; i++) {
-            timeBytes[i] = (byte) (time >>> ((3 - i) * 8));
-        }
+        ByteUtil.writeInt(4, time, timeBytes, 0);
         byte[] zero = new byte[] { 0, 0, 0, 0 };
         byte[] randomBytes = new byte[1528];
         Random random = new Random();
